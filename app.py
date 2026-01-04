@@ -8,7 +8,7 @@ import time
 import os
 
 # ---------------------------------------------------------
-# 1. System Config & Corporate Design
+# 1. System Config & Enterprise Design
 # ---------------------------------------------------------
 st.set_page_config(page_title="OccupyBed AI | Enterprise", layout="wide", page_icon="🏥")
 
@@ -24,7 +24,7 @@ st.markdown("""
         from { text-shadow: 0 0 5px #fff, 0 0 10px #238636; }
         to { text-shadow: 0 0 10px #fff, 0 0 20px #238636; }
     }
-    .glow-icon { font-size: 24px; animation: glow 1.5s ease-in-out infinite alternate; }
+    .glow-icon { font-size: 24px; animation: glow 1.5s ease-in-out infinite alternate; text-align: center; margin-bottom: 20px;}
 
     /* AI Board Section */
     .ai-container {
@@ -96,7 +96,11 @@ def init_system():
         # Synthetic Data Generation
         data = []
         for dept, info in DEPARTMENTS.items():
-            count = int(info['cap'] * np.random.uniform(0.5, 0.85))
+            # STRICT LIMIT: Ensure occupancy never exceeds capacity
+            limit_cap = info['cap']
+            # Random occupancy between 50% and 80% (Safe start)
+            count = int(limit_cap * np.random.uniform(0.5, 0.8))
+            
             for i in range(count):
                 bed_n = f"{dept[:3].upper()}-{i+1:03d}"
                 
@@ -136,9 +140,8 @@ with st.sidebar:
     if os.path.exists("logo.png"):
         st.image("logo.png", use_container_width=True)
     else:
-        st.markdown("## 🏥 OccupyBed AI")
+        st.markdown("<div class='glow-icon'>🏥 OccupyBed AI</div>", unsafe_allow_html=True)
     
-    st.markdown("<div class='glow-icon' style='text-align:center;'>⚡ System Live</div>", unsafe_allow_html=True)
     st.markdown("---")
     
     menu = st.radio("NAVIGATION", ["Overview", "Live Admissions", "Analytics", "Settings"], label_visibility="collapsed")
@@ -167,10 +170,10 @@ if menu == "Overview":
     # Net Flow
     last_24 = now - timedelta(hours=24)
     adm_24 = len(df[df['Admit_Date'] >= last_24])
-    dis_24 = len(df[df['Actual_Discharge'] >= last_24])
+    dis_24 = len(df[(df['Actual_Discharge'] >= last_24)])
     net_flow = adm_24 - dis_24
     
-    # Forecast Ready
+    # Forecast Ready based on DATE TIME comparison
     total_ready = active[active['Exp_Discharge'] <= future_limit].shape[0]
 
     # --- 1. AI Action Center ---
