@@ -2,294 +2,489 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from datetime import datetime, timedelta
 import numpy as np
-from datetime import datetime
 
-# --- 1. إعداد الصفحة ---
-st.set_page_config(layout="wide", page_title="OccupyBed AI", page_icon="🏥")
+# ---------------------------------------------------------
+# 1️⃣ إعدادات الصفحة والتصميم (Page Config & Styling)
+# ---------------------------------------------------------
+st.set_page_config(page_title="OccupyBed AI", layout="wide", page_icon="🏥")
 
-# --- 2. تعريف ألوان الهوية البصرية (Brand Identity) ---
-# تم تصحيح الأكواد لتتوافق مع الصورة (Hex Codes)
-BRAND_WHITE = "#FFFFFF"
-BRAND_LIGHT_BLUE = "#88ACDC"
-BRAND_MED_BLUE = "#4C8EC0"  # (Updated hex)
-BRAND_TEAL = "#60A487"      # للأسرة المتاحة / الحالات الآمنة
-BRAND_PRIMARY = "#1B6AA0"   # اللون الأساسي للأزرار والعناصر النشطة
-BRAND_DARK = "#2B4662"      # للعناوين والنصوص الغامقة
-BRAND_GRAY = "#666666"      # للنصوص الفرعية
-BRAND_BG_GRAY = "#F8F9FA"   # خلفية فاتحة جداً
-BRAND_ALERT = "#D32F2F"     # لون أحمر (تكميلي) للتنبيهات القصوى
-
-# --- 3. CSS لتطبيق الهوية على كامل التطبيق ---
-st.markdown(f"""
+# CSS لتخصيص الواجهة وتحسين الألوان (Traffic Light System)
+st.markdown("""
 <style>
-    /* خلفية التطبيق */
-    .stApp {{ background-color: {BRAND_WHITE} !important; }}
-    
-    /* العناوين (H1, H2, H3) بلون الهوية الداكن */
-    h1, h2, h3, .streamlit-expanderHeader {{
-        color: {BRAND_DARK} !important;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        font-weight: 700;
-    }}
-    
-    /* النصوص العادية */
-    .stMarkdown p, .stCaption, li {{
-        color: {BRAND_GRAY} !important;
-        font-size: 1rem;
-    }}
-    
-    /* الأرقام الكبيرة (KPIs) */
-    div[data-testid="stMetricValue"] {{
-        color: {BRAND_PRIMARY} !important;
-        font-weight: 800;
-        font-size: 2rem !important;
-    }}
-    div[data-testid="stMetricLabel"] {{
-        color: {BRAND_GRAY} !important;
-    }}
-    
-    /* تخصيص القائمة الجانبية (Sidebar) */
-    section[data-testid="stSidebar"] {{
-        background-color: {BRAND_BG_GRAY} !important;
-        border-right: 1px solid #E0E0E0;
-    }}
-    
-    /* الأزرار (Primary Buttons) */
-    .stButton > button {{
-        background-color: {BRAND_PRIMARY} !important;
-        color: {BRAND_WHITE} !important;
-        border-radius: 8px;
-        border: none;
-        padding: 0.5rem 1rem;
-        font-weight: 600;
-        transition: background-color 0.3s;
-    }}
-    .stButton > button:hover {{
-        background-color: {BRAND_MED_BLUE} !important;
-    }}
-    
-    /* تحسين شكل الجداول والكروت */
-    div[data-testid="stDataFrame"], .css-1r6slb0 {{
-        border: 1px solid #E0E0E0;
+    .metric-card {
+        background-color: #f8f9fa;
         border-radius: 10px;
-    }}
-    
-    /* تخصيص التابات */
-    .stTabs [data-baseweb="tab-list"] {{
-        gap: 10px;
-    }}
-    .stTabs [data-baseweb="tab"] {{
-        background-color: {BRAND_BG_GRAY};
-        border-radius: 4px;
-        color: {BRAND_GRAY};
-    }}
-    .stTabs [aria-selected="true"] {{
-        background-color: {BRAND_LIGHT_BLUE} !important;
-        color: {BRAND_WHITE} !important;
-    }}
+        padding: 15px;
+        border: 1px solid #e9ecef;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        margin-bottom: 10px;
+    }
+    .stMetric {
+        text-align: center;
+    }
+    .big-font {
+        font-size: 20px !important;
+        font-weight: bold;
+    }
+    /* مؤشرات الحالة */
+    .status-green { color: #28a745; font-weight: bold; }
+    .status-yellow { color: #ffc107; font-weight: bold; }
+    .status-red { color: #dc3545; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. البيانات الوهمية (Mock Data) ---
-if 'bed_data' not in st.session_state:
-    # إنشاء بيانات لـ 24 سرير
-    beds = []
-    statuses = ["Occupied", "Available", "Cleaning", "Maintenance"]
-    depts = ["ICU", "Surgery", "General Ward", "ER"]
+# ---------------------------------------------------------
+# 2️⃣ الثوابت وقاعدة البيانات (Constants & Mock DB)
+# ---------------------------------------------------------
+
+# قاعدة بيانات المرضى الداخلية (PIN -> Gender) - لمحاكاة الربط
+PATIENT_DB = {
+    "PIN-1001": "Male", "PIN-1002": "Female", "PIN-1003": "Male",
+    "PIN-1004": "Female", "PIN-1005": "Male", "PIN-1006": "Male",
+    "PIN-1007": "Female", "PIN-1008": "Male", "PIN-1009": "Female",
+    "PIN-1010": "Male", "PIN-1011": "Female", "PIN-1012": "Male"
+}
+
+# هيكل الأقسام والسعة الاستيعابية والجنس المسموح
+DEPARTMENTS = {
+    "Medical - Male": {"capacity": 50, "gender": "Male"},
+    "Medical - Female": {"capacity": 50, "gender": "Female"},
+    "Surgical - Male": {"capacity": 40, "gender": "Male"},
+    "Surgical - Female": {"capacity": 40, "gender": "Female"},
+    "ICU": {"capacity": 20, "gender": "Mixed"},
+    "Pediatric": {"capacity": 30, "gender": "Mixed"},
+    "Obstetrics & Gynecology": {"capacity": 20, "gender": "Female"},
+}
+
+# ---------------------------------------------------------
+# 3️⃣ دوال مساعدة (Helper Functions)
+# ---------------------------------------------------------
+
+def get_bed_list(dept_name):
+    """توليد قائمة أرقام الأسرة للقسم"""
+    cap = DEPARTMENTS[dept_name]["capacity"]
+    prefix = "".join([w[0] for w in dept_name.split()]) # e.g., Medical Male -> MM
+    return [f"{prefix}-{i+1:03d}" for i in range(cap)]
+
+def get_status_color(occupancy_rate):
+    """تحديد لون الحالة بناء على نسبة الإشغال"""
+    if occupancy_rate < 70:
+        return "🟢 Safe", "#28a745" # الأخضر
+    elif 70 <= occupancy_rate <= 84:
+        return "🟡 Warning", "#ffc107" # الأصفر
+    else:
+        return "🔴 Critical", "#dc3545" # الأحمر
+
+# ---------------------------------------------------------
+# 4️⃣ مولد البيانات الذكي (AI/Pandas Synthetic Data Generator)
+# ---------------------------------------------------------
+def generate_synthetic_data(num_records=60):
+    """
+    تقوم هذه الدالة باستخدام Pandas و NumPy لمحاكاة بيانات مستشفى واقعية.
+    تستخدم لتعبئة النظام عند البدء أو عند طلب المستخدم.
+    """
+    depts = list(DEPARTMENTS.keys())
+    sources = ["Emergency", "Elective", "Transfer"]
     
-    for i in range(1, 25):
-        status = np.random.choice(statuses, p=[0.6, 0.3, 0.05, 0.05])
-        dept = np.random.choice(depts)
-        if status == "Occupied":
-            patient_id = f"P-{np.random.randint(1000,9999)}"
-            pred_discharge = f"{np.random.randint(1,48)} hrs"
-        else:
-            patient_id = "--"
-            pred_discharge = "--"
-            
-        beds.append({
-            "Bed ID": f"B-{i:02d}",
+    # اختيار عشوائي للأقسام والمصادر بأوزان منطقية
+    random_depts = np.random.choice(depts, num_records)
+    random_sources = np.random.choice(sources, num_records, p=[0.5, 0.4, 0.1])
+    
+    data_list = []
+    generated_beds = set() # لضمان عدم تكرار السرير لنفس الوقت في المحاكاة
+
+    for i in range(num_records):
+        dept = random_depts[i]
+        cap = DEPARTMENTS[dept]['capacity']
+        
+        # محاولة إيجاد سرير فارغ عشوائي
+        prefix = "".join([w[0] for w in dept.split()])
+        bed_num = f"{prefix}-{np.random.randint(1, cap+1):03d}"
+        
+        # منع التكرار البسيط في التوليد العشوائي
+        if f"{dept}-{bed_num}" in generated_beds:
+            continue
+        generated_beds.add(f"{dept}-{bed_num}")
+
+        # تواريخ ذكية: دخول خلال الأسبوع الماضي
+        days_back = np.random.randint(0, 10)
+        adm_date = datetime.now() - timedelta(days=days_back, hours=np.random.randint(1, 23))
+        
+        # مدة الإقامة المتوقعة
+        stay_duration = np.random.randint(2, 14)
+        exp_date = adm_date + timedelta(days=stay_duration)
+        
+        # حالة الخروج: 80% لا يزالون منومين (None)، 20% خرجوا (تاريخ)
+        act_date = None
+        if np.random.random() < 0.2: 
+            # خرج مبكراً أو متأخراً قليلاً
+            act_date = exp_date + timedelta(hours=np.random.randint(-24, 48))
+        
+        data_list.append({
+            "PIN": f"PIN-{1000+i}", # PIN افتراضي
             "Department": dept,
-            "Status": status,
-            "Patient": patient_id,
-            "AI Prediction": pred_discharge
+            "Bed_Number": bed_num,
+            "Admission_Date": adm_date,
+            "Admission_Source": random_sources[i],
+            "Expected_Discharge": exp_date,
+            "Actual_Discharge": act_date
         })
-    st.session_state.bed_data = pd.DataFrame(beds)
+    
+    return pd.DataFrame(data_list)
 
-# --- 5. القائمة الجانبية ---
+# ---------------------------------------------------------
+# 5️⃣ إدارة حالة التطبيق (State Management)
+# ---------------------------------------------------------
+
+if 'df' not in st.session_state:
+    # عند تشغيل التطبيق لأول مرة، قم بتوليد بيانات محاكاة
+    st.session_state.df = generate_synthetic_data(num_records=80)
+
+df = st.session_state.df
+
+# ---------------------------------------------------------
+# 6️⃣ القائمة الجانبية (Sidebar)
+# ---------------------------------------------------------
+
 with st.sidebar:
-    try:
-        st.image("logo.png", width=180)
-    except:
-        st.markdown(f"<h1 style='color:{BRAND_PRIMARY}'>OccupyBed AI</h1>", unsafe_allow_html=True)
+    st.title("🏥 OccupyBed AI")
+    st.caption("Intelligent Bed Management System")
     
-    st.markdown("### Navigation")
-    page = st.radio("Go to", ["Dashboard Overview", "Visual Ward Map", "Analytics & Forecast"], label_visibility="collapsed")
+    menu = st.radio("Navigation", 
+        ["Overview & AI Actions", "Live Admissions", "KPIs & Analytics", "Data Management"])
     
     st.markdown("---")
-    st.markdown(f"**System Status:** <span style='color:{BRAND_TEAL}'>● Online</span>", unsafe_allow_html=True)
-    st.caption("AI Model: v2.4 (Live)")
+    st.info("**Current User:** \nAdmin / Bed Manager")
+    st.caption("v1.0 MVP Build")
 
-# =======================================================
-# الصفحة 1: Dashboard Overview (نظرة عامة)
-# =======================================================
-if page == "Dashboard Overview":
-    st.title("🏥 Hospital Command Center")
-    st.caption("Real-time occupancy insights and AI-driven alerts.")
-    
-    # 1. KPIs Row
-    k1, k2, k3, k4 = st.columns(4)
-    df = st.session_state.bed_data
-    occ_rate = int((len(df[df['Status']=='Occupied']) / len(df)) * 100)
-    
-    with k1:
-        with st.container(border=True):
-            st.metric("Total Occupancy", f"{occ_rate}%", "High Load", delta_color="inverse")
-            st.progress(occ_rate)
-    with k2:
-        with st.container(border=True):
-            st.metric("Available Beds", len(df[df['Status']=='Available']), "-2 vs Avg")
-    with k3:
-        with st.container(border=True):
-            st.metric("Predicted Discharges", "5 Beds", "Next 4 Hours")
-    with k4:
-        with st.container(border=True):
-            st.metric("ER Wait Time", "42 mins", "Stable", delta_color="normal")
+# ---------------------------------------------------------
+# 7️⃣ الصفحة الرئيسية: Overview & AI Actions
+# ---------------------------------------------------------
+if menu == "Overview & AI Actions":
+    st.header("📊 Real-time Overview & AI Insights")
 
-    # 2. Alerts Section (إضافة مفيدة: تنبيهات ذكية)
-    st.subheader("⚠️ AI Early Warning System")
-    alert_col1, alert_col2 = st.columns([2, 1])
-    
-    with alert_col1:
-        # كروت تنبيه بتصميم مخصص
-        st.markdown(f"""
-        <div style="background-color: #FFF4E5; border-left: 5px solid #FF9800; padding: 15px; border-radius: 5px; margin-bottom: 10px;">
-            <strong style="color: #E65100;">Warning: ICU Capacity at 90%</strong><br>
-            <span style="color: {BRAND_GRAY};">AI predicts full saturation by 18:00 based on ER inflow trends. Recommend diverting non-critical transfers.</span>
-        </div>
-        <div style="background-color: #E8F5E9; border-left: 5px solid {BRAND_TEAL}; padding: 15px; border-radius: 5px;">
-            <strong style="color: {BRAND_TEAL};">Optimization Opportunity</strong><br>
-            <span style="color: {BRAND_GRAY};">3 Patients in Surgery Ward are marked "Ready for Discharge". Process now to clear beds.</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with alert_col2:
-        st.info("💡 **AI Recommendation:**\nOpen Overflow Ward B to handle expected weekend surge.")
-
-# =======================================================
-# الصفحة 2: Visual Ward Map (الإضافة المبهرة - خريطة الأسرّة)
-# =======================================================
-elif page == "Visual Ward Map":
-    st.title("🗺️ Live Ward Map")
-    st.caption("Visual representation of bed status across departments.")
-    
-    # فلاتر
-    f_col1, f_col2, f_col3 = st.columns([1,1,2])
-    with f_col1:
-        selected_dept = st.selectbox("Filter by Department", ["All"] + list(st.session_state.bed_data['Department'].unique()))
-    with f_col3:
-        st.markdown(f"""
-        <div style="display: flex; gap: 15px; align-items: center; justify-content: flex-end; height: 100%;">
-            <span style="color:{BRAND_PRIMARY}">■ Occupied</span>
-            <span style="color:{BRAND_TEAL}">■ Available</span>
-            <span style="color:{BRAND_GRAY}">■ Maintenance</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("---")
-    
-    # تصفية البيانات
-    display_df = st.session_state.bed_data
-    if selected_dept != "All":
-        display_df = display_df[display_df['Department'] == selected_dept]
-
-    # رسم الخريطة (Grid Layout)
-    cols = st.columns(4) # 4 أسرة في الصف
-    for index, row in display_df.iterrows():
-        # تحديد اللون بناءً على الحالة
-        if row['Status'] == 'Occupied':
-            card_color = BRAND_PRIMARY
-            bg_color = "#E3F2FD" # Light Blue BG
-            icon = "👤"
-        elif row['Status'] == 'Available':
-            card_color = BRAND_TEAL
-            bg_color = "#E8F5E9" # Light Green BG
-            icon = "🛏️"
-        else:
-            card_color = BRAND_GRAY
-            bg_color = "#F5F5F5"
-            icon = "🔧"
-
-        with cols[index % 4]:
-            st.markdown(f"""
-            <div style="
-                border: 2px solid {card_color};
-                background-color: {bg_color};
-                border-radius: 10px;
-                padding: 15px;
-                margin-bottom: 20px;
-                text-align: center;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            ">
-                <div style="font-size: 2rem; margin-bottom: 5px;">{icon}</div>
-                <h4 style="color: {BRAND_DARK}; margin: 0;">{row['Bed ID']}</h4>
-                <p style="color: {BRAND_GRAY}; font-size: 0.8rem; margin: 0;">{row['Department']}</p>
-                <div style="background-color: {card_color}; color: white; padding: 2px 8px; border-radius: 12px; display: inline-block; font-size: 0.8rem; margin-top: 5px;">
-                    {row['Status']}
-                </div>
-                <p style="color: {BRAND_DARK}; font-size: 0.7rem; margin-top: 8px;">
-                    <b>Prediction:</b> {row['AI Prediction']}
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-# =======================================================
-# الصفحة 3: Analytics & Forecast (تحليلات متقدمة)
-# =======================================================
-elif page == "Analytics & Forecast":
-    st.title("📊 Predictive Analytics")
-    
-    tab1, tab2 = st.tabs(["Occupancy Forecast", "Patient Demographics"])
-    
-    with tab1:
-        st.subheader("48-Hour Occupancy Forecast")
-        # بيانات وهمية للتنبؤ
-        hours = list(range(0, 24, 2))
-        actual = [70, 72, 75, 80, 85, 88, 90, 85, 80, 78, 75, 72]
-        predicted = [70, 73, 78, 85, 92, 95, 92, 88, 82, 75, 70, 68]
-        
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=hours, y=actual, mode='lines', name='Actual', line=dict(color=BRAND_PRIMARY, width=3)))
-        fig.add_trace(go.Scatter(x=hours, y=predicted, mode='lines', name='AI Prediction', line=dict(color=BRAND_LIGHT_BLUE, width=3, dash='dash')))
-        
-        # إضافة منطقة "الخطر"
-        fig.add_hrect(y0=90, y1=100, line_width=0, fillcolor="red", opacity=0.1, annotation_text="Critical Capacity", annotation_position="top right")
-        
-        fig.update_layout(
-            xaxis_title="Hour of Day",
-            yaxis_title="Occupancy %",
-            plot_bgcolor="white",
-            height=400,
-            margin=dict(l=20, r=20, t=40, b=20)
+    # --- Forecast Control ---
+    col_fc, col_dummy = st.columns([2, 2])
+    with col_fc:
+        forecast_hours = st.select_slider(
+            "🔮 Forecast Window (توقع توفر الأسرة خلال)",
+            options=[6, 12, 24, 48, 72],
+            value=24
         )
-        st.plotly_chart(fig, use_container_width=True)
-        
-    with tab2:
-        c1, c2 = st.columns(2)
-        with c1:
-            st.subheader("Admission Sources")
-            labels = ['Emergency', 'Referral', 'Elective']
-            values = [55, 15, 30]
-            # استخدام ألوان الهوية في الرسم البياني
-            fig_pie = px.pie(values=values, names=labels, hole=0.6, 
-                             color_discrete_sequence=[BRAND_PRIMARY, BRAND_LIGHT_BLUE, BRAND_TEAL])
-            st.plotly_chart(fig_pie, use_container_width=True)
+
+    # --- Calculations ---
+    # المرضى المنومين حالياً (الذين لم يخرجوا)
+    active_patients = df[df['Actual_Discharge'].isnull()]
+    
+    total_beds_hospital = sum(d['capacity'] for d in DEPARTMENTS.values())
+    occupied_beds_hospital = len(active_patients)
+    available_beds_hospital = total_beds_hospital - occupied_beds_hospital
+    occupancy_pct = (occupied_beds_hospital / total_beds_hospital) * 100
+    
+    # حساب الجاهزين للخروج خلال نافذة التنبؤ
+    now = datetime.now()
+    future_time = now + timedelta(hours=forecast_hours)
+    
+    # جاهز للخروج: وقته المتوقع خلال الفترة المحددة
+    ready_to_discharge = active_patients[
+        (active_patients['Expected_Discharge'] <= future_time)
+    ].shape[0]
+
+    # --- Top Metrics ---
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total Beds", total_beds_hospital)
+    m2.metric("Occupied Beds", occupied_beds_hospital, f"{occupancy_pct:.1f}%")
+    m3.metric("Available Now", available_beds_hospital)
+    m4.metric(f"Expected Free ({forecast_hours}h)", ready_to_discharge, delta_color="off")
+
+    st.markdown("---")
+
+    # --- AI Section ---
+    st.subheader("🤖 AI Suggested Actions")
+    
+    c_ai_text, c_ai_chart = st.columns([2, 1])
+    
+    with c_ai_text:
+        suggestions = []
+        for dept, info in DEPARTMENTS.items():
+            dept_pats = active_patients[active_patients['Department'] == dept]
+            occ = len(dept_pats)
+            cap = info['capacity']
+            ratio = (occ / cap) * 100
             
-        with c2:
-            st.subheader("Patients by Department")
-            dept_counts = st.session_state.bed_data['Department'].value_counts()
-            fig_bar = px.bar(dept_counts, x=dept_counts.index, y=dept_counts.values,
-                             color_discrete_sequence=[BRAND_MED_BLUE])
-            fig_bar.update_layout(plot_bgcolor="white")
-            st.plotly_chart(fig_bar, use_container_width=True)
+            # AI Logic Rules
+            if ratio >= 85:
+                suggestions.append(f"🔴 **{dept}** ({ratio:.0f}%): Critical occupancy! Accelerate discharge for stable patients.")
+            elif ratio >= 70:
+                suggestions.append(f"🟡 **{dept}** ({ratio:.0f}%): High load. Review elective admissions.")
+            
+            # Delayed Logic
+            delayed = dept_pats[dept_pats['Expected_Discharge'] < now].shape[0]
+            if delayed > 0:
+                suggestions.append(f"⚠️ **{dept}**: {delayed} patients exceeding expected stay. Coordinate with physicians.")
+
+        if not suggestions:
+             st.success("✅ AI Analysis: Operations are stable. No critical bottlenecks detected.")
+        else:
+            for s in suggestions:
+                st.write(s)
+
+    with c_ai_chart:
+        # Gauge Chart
+        fig = go.Figure(go.Indicator(
+            mode = "gauge+number",
+            value = occupancy_pct,
+            title = {'text': "Hospital Pressure"},
+            gauge = {
+                'axis': {'range': [None, 100]},
+                'bar': {'color': "black"},
+                'steps': [
+                    {'range': [0, 70], 'color': "#28a745"},
+                    {'range': [70, 85], 'color': "#ffc107"},
+                    {'range': [85, 100], 'color': "#dc3545"}],
+            }
+        ))
+        fig.update_layout(height=200, margin=dict(l=10,r=10,t=30,b=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("---")
+    
+    # --- Department Cards (Grid View) ---
+    st.subheader("🏥 Department Live Status")
+    dept_names = list(DEPARTMENTS.keys())
+    
+    # Loop to create grid
+    for i in range(0, len(dept_names), 3):
+        cols = st.columns(3)
+        for j in range(3):
+            if i + j < len(dept_names):
+                dept = dept_names[i+j]
+                info = DEPARTMENTS[dept]
+                
+                # Dept Stats
+                d_pats = active_patients[active_patients['Department'] == dept]
+                d_occ = len(d_pats)
+                d_cap = info['capacity']
+                d_rate = (d_occ / d_cap) * 100
+                d_avail = d_cap - d_occ
+                d_ready = d_pats[d_pats['Expected_Discharge'] <= future_time].shape[0]
+                
+                status_txt, status_clr = get_status_color(d_rate)
+                
+                with cols[j]:
+                    st.markdown(f"""
+                    <div class="metric-card" style="border-top: 5px solid {status_clr};">
+                        <h4 style="margin:0;">{dept}</h4>
+                        <p style="color:gray; font-size:0.9em;">{info['gender']} Only</p>
+                        <hr style="margin:5px 0;">
+                        <div style="display:flex; justify-content:space-between;">
+                            <span>Occupied: <b>{d_occ}/{d_cap}</b></span>
+                            <span style="color:{status_clr}"><b>{status_txt}</b></span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between;">
+                            <span>Available: <b>{d_avail}</b></span>
+                            <span>Exp. Free: <b>{d_ready}</b></span>
+                        </div>
+                        <div style="margin-top:8px; width:100%; background:#ddd; height:6px; border-radius:3px;">
+                            <div style="width:{d_rate}%; background:{status_clr}; height:100%; border-radius:3px;"></div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+# ---------------------------------------------------------
+# 8️⃣ صفحة الإدخال: Live Admissions
+# ---------------------------------------------------------
+elif menu == "Live Admissions":
+    st.header("📝 Patient Admission & Discharge")
+    
+    tab_in, tab_out = st.tabs(["📥 New Admission", "📤 Process Discharge"])
+    
+    # --- Admission Form ---
+    with tab_in:
+        with st.form("admit_form"):
+            c1, c2 = st.columns(2)
+            with c1:
+                pin_list = list(PATIENT_DB.keys())
+                sel_pin = st.selectbox("Select Patient PIN", ["Choose..."] + pin_list)
+                
+                # Auto-Detect Gender
+                gender_val = "Unknown"
+                if sel_pin != "Choose...":
+                    gender_val = PATIENT_DB.get(sel_pin, "Unknown")
+                    st.info(f"🧬 System Detected Gender: **{gender_val}**")
+                
+                adm_date = st.date_input("Admission Date", datetime.now())
+                adm_time = st.time_input("Time", datetime.now().time())
+                
+            with c2:
+                # Filter Departments by Gender
+                valid_depts = []
+                for d, info in DEPARTMENTS.items():
+                    if info['gender'] == "Mixed" or info['gender'] == gender_val:
+                        valid_depts.append(d)
+                
+                if sel_pin == "Choose...": valid_depts = list(DEPARTMENTS.keys())
+                
+                sel_dept = st.selectbox("Assign Department", ["Choose..."] + valid_depts)
+                
+                # Filter Beds (Show only available)
+                avail_beds = []
+                if sel_dept != "Choose...":
+                    all_beds = get_bed_list(sel_dept)
+                    busy_beds = df[(df['Department']==sel_dept) & (df['Actual_Discharge'].isnull())]['Bed_Number'].tolist()
+                    avail_beds = [b for b in all_beds if b not in busy_beds]
+                
+                sel_bed = st.selectbox("Assign Bed", avail_beds if sel_dept != "Choose..." else [])
+                
+                src = st.selectbox("Source", ["Emergency", "Elective", "Transfer"])
+                exp_date = st.date_input("Expected Discharge", datetime.now() + timedelta(days=3))
+            
+            submit = st.form_submit_button("✅ Admit Patient")
+            
+            if submit:
+                if sel_pin != "Choose..." and sel_dept != "Choose..." and sel_bed:
+                    new_rec = {
+                        "PIN": sel_pin, "Department": sel_dept, "Bed_Number": sel_bed,
+                        "Admission_Date": datetime.combine(adm_date, adm_time),
+                        "Admission_Source": src,
+                        "Expected_Discharge": datetime.combine(exp_date, datetime.now().time()),
+                        "Actual_Discharge": None
+                    }
+                    st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new_rec])], ignore_index=True)
+                    st.success(f"Admitted {sel_pin} to {sel_dept} ({sel_bed})")
+                else:
+                    st.error("Please complete all fields.")
+
+    # --- Discharge Form ---
+    with tab_out:
+        active = df[df['Actual_Discharge'].isnull()]
+        if active.empty:
+            st.warning("No active patients found.")
+        else:
+            pat_list = active['Bed_Number'] + " | " + active['PIN'] + " (" + active['Department'] + ")"
+            sel_pat = st.selectbox("Select Patient to Discharge", pat_list)
+            
+            if sel_pat:
+                bed_to_free = sel_pat.split(" | ")[0]
+                
+                cd1, cd2 = st.columns(2)
+                with cd1: dis_date = st.date_input("Discharge Date", datetime.now())
+                with cd2: dis_time = st.time_input("Discharge Time", datetime.now().time())
+                
+                if st.button("🚪 Confirm Discharge"):
+                    # Update DataFrame
+                    idx = df[(df['Bed_Number']==bed_to_free) & (df['Actual_Discharge'].isnull())].index
+                    st.session_state.df.at[idx[0], 'Actual_Discharge'] = datetime.combine(dis_date, dis_time)
+                    st.success("Patient discharged successfully. Bed is now free.")
+                    st.rerun()
+
+# ---------------------------------------------------------
+# 9️⃣ صفحة المؤشرات: KPIs & Analytics
+# ---------------------------------------------------------
+elif menu == "KPIs & Analytics":
+    st.header("📈 Operational Analytics")
+    
+    # A. Hospital KPIs
+    st.subheader("🅰 Hospital Level")
+    
+    # Calculate Net Flow (Last 24h)
+    yesterday = datetime.now() - timedelta(hours=24)
+    admitted_24h = len(df[df['Admission_Date'] >= yesterday])
+    discharged_24h = len(df[(df['Actual_Discharge'] >= yesterday) & (df['Actual_Discharge'].notnull())])
+    net = admitted_24h - discharged_24h
+    
+    # Bed Turnover (Simulated simplistic formula)
+    total_discharges = len(df[df['Actual_Discharge'].notnull()])
+    turnover_rate = total_discharges / total_beds_hospital if total_beds_hospital > 0 else 0
+    
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Admission Rate (24h)", admitted_24h)
+    k2.metric("Discharge Rate (24h)", discharged_24h)
+    k3.metric("Net Flow", f"{net:+}", delta_color="inverse")
+    k4.metric("Bed Turnover", f"{turnover_rate:.2f}")
+    
+    st.markdown("---")
+    
+    # B. Department Drilldown
+    st.subheader("🅱 Department Drill-down")
+    sel_dept = st.selectbox("Choose Department", list(DEPARTMENTS.keys()))
+    
+    d_df = df[df['Department'] == sel_dept]
+    d_active = d_df[d_df['Actual_Discharge'].isnull()]
+    
+    # ALOS Calculation
+    d_closed = d_df[d_df['Actual_Discharge'].notnull()].copy()
+    alos = 0
+    if not d_closed.empty:
+        d_closed['LOS'] = (d_closed['Actual_Discharge'] - d_closed['Admission_Date']).dt.total_seconds() / 86400
+        alos = d_closed['LOS'].mean()
+    
+    col_d1, col_d2 = st.columns([1, 2])
+    
+    with col_d1:
+        st.metric("Avg Length of Stay (ALOS)", f"{alos:.1f} Days")
+        st.metric("Current Patients", len(d_active))
+        
+        # Delayed patients
+        delayed = d_active[d_active['Expected_Discharge'] < datetime.now()].shape[0]
+        st.metric("Delayed Discharges", delayed, delta=-delayed, delta_color="inverse")
+        
+    with col_d2:
+        if not d_df.empty:
+            fig = px.pie(d_df, names='Admission_Source', title=f"Admissions Source: {sel_dept}", hole=0.4)
+            fig.update_layout(height=300)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No data available for this department.")
+
+# ---------------------------------------------------------
+# 🔟 إعدادات البيانات: Data Management
+# ---------------------------------------------------------
+elif menu == "Data Management":
+    st.header("💾 Data Operations")
+    
+    # 1. AI Simulation
+    st.subheader("1. AI Data Simulation (Pandas Generator)")
+    st.write("Use this to generate new synthetic scenarios for testing.")
+    
+    if st.button("🔄 Generate New AI Simulation Data"):
+        st.session_state.df = generate_synthetic_data(60)
+        st.success("✅ New synthetic data generated successfully using Pandas/NumPy!")
+        st.rerun()
+        
+    st.markdown("---")
+
+    # 2. Export / Import
+    col_ex, col_im = st.columns(2)
+    
+    with col_ex:
+        st.subheader("2. Export Data")
+        # Convert to CSV friendly format
+        df_out = df.copy()
+        for c in ['Admission_Date', 'Expected_Discharge', 'Actual_Discharge']:
+            df_out[c] = df_out[c].astype(str)
+        
+        csv = df_out.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download CSV", csv, "bed_data.csv", "text/csv")
+        
+    with col_im:
+        st.subheader("3. Import Data")
+        up_file = st.file_uploader("Upload Excel/CSV", type=['xlsx', 'csv'])
+        if up_file:
+            try:
+                if up_file.name.endswith('.csv'):
+                    new_df = pd.read_csv(up_file)
+                else:
+                    new_df = pd.read_excel(up_file)
+                
+                # Fix dates
+                for c in ['Admission_Date', 'Expected_Discharge', 'Actual_Discharge']:
+                    if c in new_df.columns:
+                        new_df[c] = pd.to_datetime(new_df[c], errors='coerce')
+                
+                st.session_state.df = new_df
+                st.success("Data imported successfully!")
+            except Exception as e:
+                st.error(f"Error: {e}")
