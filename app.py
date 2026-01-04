@@ -8,273 +8,421 @@ import time
 import os
 
 # ---------------------------------------------------------
-# 1. إعدادات الصفحة والتصميم (مطابق للطلب: تلوين وتنسيق)
+# 1. System Config & Enterprise Styling
 # ---------------------------------------------------------
-st.set_page_config(page_title="OccupyBed AI | Pro Dashboard", layout="wide", page_icon="🏥")
+st.set_page_config(page_title="OccupyBed AI | Command Center", layout="wide", page_icon="🏥")
 
+# Forced Dark Theme & Advanced CSS
 st.markdown("""
 <style>
-    /* Global Dark Theme */
-    .stApp { background-color: #0E1117; color: #E6EDF3; }
+    /* Global Settings */
+    .stApp { background-color: #090C10; color: #E6EDF3; font-family: 'Segoe UI', sans-serif; }
     [data-testid="stSidebar"] { background-color: #010409; border-right: 1px solid #30363D; }
-
-    /* 1. AI Command Board (لوحة الذكاء الاصطناعي) */
-    .ai-box {
-        background: linear-gradient(90deg, #161B22 0%, #0D1117 100%);
-        border: 1px solid #30363D; border-left: 6px solid #A371F7;
+    
+    /* AI Board Section */
+    .ai-board {
+        background: linear-gradient(145deg, #161B22, #0D1117);
+        border: 1px solid #30363D; border-left: 5px solid #A371F7;
         border-radius: 8px; padding: 20px; margin-bottom: 20px;
     }
-    .ai-header { color: #A371F7; font-weight: bold; font-size: 18px; display: flex; justify-content: space-between; }
-    .ai-rec { color: #E6EDF3; font-size: 15px; margin-top: 10px; font-weight: 500; }
-    .ai-risk { color: #F85149; font-size: 13px; margin-top: 5px; }
+    .ai-title { font-size: 16px; font-weight: bold; color: #A371F7; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+    .ai-msg { font-size: 14px; color: #E6EDF3; margin-bottom: 5px; }
+    .ai-tag { font-size: 11px; background: #1F2428; padding: 2px 8px; border-radius: 4px; color: #8B949E; border: 1px solid #30363D; }
 
-    /* 2. KPI Indicators (مؤشرات ملونة) */
-    .kpi-card {
-        background-color: #161B22; border: 1px solid #30363D; border-radius: 6px;
-        padding: 15px; text-align: center; height: 100%;
-    }
-    .kpi-title { color: #8B949E; font-size: 12px; text-transform: uppercase; font-weight: 700; }
-    .kpi-val { font-size: 28px; font-weight: 800; margin: 5px 0; }
-    .kpi-note { font-size: 11px; opacity: 0.8; }
-    
-    /* Colors for Status */
-    .txt-green { color: #3FB950; }
-    .txt-yellow { color: #D29922; }
-    .txt-red { color: #F85149; }
-
-    /* 3. Department Cards (تفاصيل الأقسام والجنس) */
-    .dept-card {
+    /* KPI Matrix */
+    .kpi-container {
         background-color: #0D1117; border: 1px solid #30363D; border-radius: 6px;
+        padding: 15px; text-align: center; height: 100%;
+        transition: all 0.3s;
+    }
+    .kpi-container:hover { border-color: #58A6FF; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+    .kpi-label { color: #8B949E; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+    .kpi-val { color: #F0F6FC; font-size: 28px; font-weight: 700; margin: 0; }
+    .kpi-delta { font-size: 12px; font-weight: 600; margin-top: 5px; }
+    
+    /* Department Cards with Indicators */
+    .dept-card-pro {
+        background-color: #161B22; border: 1px solid #30363D; border-radius: 6px;
         padding: 15px; margin-bottom: 12px; position: relative;
     }
-    .dept-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #21262D; padding-bottom: 8px; margin-bottom: 8px; }
-    .dept-name { font-size: 15px; font-weight: 700; color: #E6EDF3; }
-    .dept-metrics { display: flex; justify-content: space-between; font-size: 12px; color: #8B949E; }
-    .gender-badge { background: #21262D; padding: 2px 6px; border-radius: 4px; color: #C9D1D9; font-size: 10px; }
-    .overflow-alert { color: #D29922; font-size: 11px; margin-top: 6px; font-style: italic; }
+    .dept-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .dept-name { font-size: 14px; font-weight: 700; color: #E6EDF3; }
+    .indicator-dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; }
+    
+    /* Visual Bed Matrix */
+    .bed-grid { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 8px; }
+    .bed-box { width: 10px; height: 10px; border-radius: 2px; }
+    .b-free { background: #238636; opacity: 0.3; }
+    .b-occ { background: #DA3633; box-shadow: 0 0 3px #DA3633; }
+    .b-delay { background: #D29922; box-shadow: 0 0 3px #D29922; } /* New: Delayed Discharge */
 
     /* Custom Inputs */
     div[data-baseweb="select"] > div, input { background-color: #0D1117 !important; border-color: #30363D !important; color: white !important; }
+    [data-testid="stMetricValue"] { color: #E6EDF3 !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. Logic & Data (محاكاة ذكية للسيناريوهات المطلوبة)
+# 2. Logic & Data Model
 # ---------------------------------------------------------
 
-# تعريف الأقسام مع تحديد "القسم البديل" (Overflow Target)
 DEPARTMENTS = {
-    "ICU": {"cap": 16, "overflow": "HDU", "gen": "Mixed"},
-    "Surgical Male": {"cap": 40, "overflow": "Medical Male", "gen": "Male"},
-    "Surgical Female": {"cap": 40, "overflow": "Medical Female", "gen": "Female"},
-    "Medical Male": {"cap": 50, "overflow": "Surgical Male", "gen": "Male"},
-    "Medical Female": {"cap": 50, "overflow": "Surgical Female", "gen": "Female"},
-    "Pediatric": {"cap": 30, "overflow": "None", "gen": "Mixed"},
-    "Obstetrics": {"cap": 24, "overflow": "Gynae", "gen": "Female"},
+    "ICU": {"cap": 16, "gen": "Mixed", "type": "Critical"},
+    "Surgical Male": {"cap": 40, "gen": "Male", "type": "Acute"},
+    "Surgical Female": {"cap": 40, "gen": "Female", "type": "Acute"},
+    "Medical Male": {"cap": 50, "gen": "Male", "type": "General"},
+    "Medical Female": {"cap": 50, "gen": "Female", "type": "General"},
+    "Pediatric": {"cap": 30, "gen": "Mixed", "type": "General"},
+    "Obstetrics": {"cap": 24, "gen": "Female", "type": "Acute"},
 }
 
-def init_data():
-    if 'df' not in st.session_state:
-        data = []
-        for _ in range(150):
-            dept = np.random.choice(list(DEPARTMENTS.keys()))
-            cap = DEPARTMENTS[dept]['cap']
-            bed_n = np.random.randint(1, cap+1)
-            
-            # محاكاة تواريخ للدخول والخروج
-            adm = datetime.now() - timedelta(days=np.random.randint(0, 5), hours=np.random.randint(1, 20))
-            exp = adm + timedelta(days=np.random.randint(2, 8))
-            
-            # محاكاة حالة الخروج (البعض خرج والبعض لا)
-            act = exp if np.random.random() < 0.15 else None
-            
-            # محاكاة "عدم توافق الجنس" (Gender Mismatch Scenario)
-            # مثلاً 5% من الحالات تكون في قسم خطأ بسبب الضغط
-            gender_rule = DEPARTMENTS[dept]['gen']
-            if gender_rule == "Male": pat_gen = np.random.choice(["Male", "Female"], p=[0.95, 0.05])
-            elif gender_rule == "Female": pat_gen = np.random.choice(["Female", "Male"], p=[0.95, 0.05])
-            else: pat_gen = np.random.choice(["Male", "Female"])
+PATIENT_DB = {f"PIN-{1000+i}": ("Male" if i % 2 == 0 else "Female") for i in range(1000)}
 
-            data.append({
-                "Department": dept,
-                "Bed": f"{dept[:3].upper()}-{bed_n}",
-                "Gender": pat_gen,
-                "Admit_Date": adm,
-                "Exp_Discharge": exp,
-                "Actual_Discharge": act
-            })
-        st.session_state.df = pd.DataFrame(data)
+def init_system():
+    if 'version' not in st.session_state or st.session_state.version != '5.0':
+        # Create Data Structure
+        st.session_state.df = pd.DataFrame(columns=[
+            "PIN", "Gender", "Department", "Bed", "Admit_Date", 
+            "Exp_Discharge", "Actual_Discharge", "Source"
+        ])
+        
+        # Populate with Realistic Scenarios (Bottlenecks & Delays)
+        new_data = []
+        for dept, info in DEPARTMENTS.items():
+            # Random occupancy level (ICU tends to be fuller)
+            occupancy_factor = 0.9 if info['type'] == 'Critical' else np.random.uniform(0.6, 0.85)
+            count = int(info['cap'] * occupancy_factor)
+            
+            for i in range(count):
+                bed_n = i + 1
+                adm = datetime.now() - timedelta(days=np.random.randint(0, 10), hours=np.random.randint(1, 12))
+                
+                # Create some delayed discharges (Bed Blockers)
+                is_delayed = np.random.random() < 0.15 # 15% are delayed
+                if is_delayed:
+                    exp = datetime.now() - timedelta(hours=np.random.randint(2, 24)) # Should have left already
+                else:
+                    exp = adm + timedelta(days=np.random.randint(2, 8))
+                
+                new_data.append({
+                    "PIN": f"PIN-{np.random.randint(2000, 9999)}",
+                    "Gender": "Female" if "Female" in dept else ("Male" if "Male" in dept else np.random.choice(["Male", "Female"])),
+                    "Department": dept,
+                    "Bed": f"{dept[:3].upper()}-{bed_n:03d}",
+                    "Admit_Date": adm,
+                    "Exp_Discharge": exp,
+                    "Actual_Discharge": None, 
+                    "Source": np.random.choice(["Emergency", "Transfer", "Elective"], p=[0.7, 0.1, 0.2])
+                })
+        
+        st.session_state.df = pd.DataFrame(new_data)
+        st.session_state.version = '5.0'
 
-init_data()
+init_system()
 df = st.session_state.df
 
 # ---------------------------------------------------------
 # 3. Sidebar
 # ---------------------------------------------------------
 with st.sidebar:
-    if os.path.exists("logo.png"): st.image("logo.png", use_container_width=True)
-    else: st.header("OccupyBed AI")
+    if os.path.exists("logo.png"):
+        st.image("logo.png", use_container_width=True)
+    else:
+        st.markdown("## OccupyBed AI")
+        st.caption("Enterprise Edition v5.0")
+        
+    st.markdown("---")
+    menu = st.radio("MODULES", ["Command Center", "Admissions", "Analytics", "Settings"], label_visibility="collapsed")
     
     st.markdown("---")
-    menu = st.radio("القائمة الرئيسية", ["لوحة القيادة (Command Center)", "إدارة التنويم", "الإعدادات"])
-    st.markdown("---")
-    st.caption(f"Last Update: {datetime.now().strftime('%H:%M:%S')}")
+    st.markdown(f"""
+    <div style="font-size:12px; color:#8B949E;">
+    LAST UPDATE<br>
+    <b style="color:#E6EDF3">{datetime.now().strftime('%H:%M:%S')}</b>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 4. Command Center (تنفيذ النواقص 1 و 2 و 3)
+# 4. Command Center (The Main Dashboard)
 # ---------------------------------------------------------
-if menu == "لوحة القيادة (Command Center)":
-    
-    # === الحسابات المركزية ===
+if menu == "Command Center":
+    c1, c2 = st.columns([3, 1])
+    with c1: st.title("Hospital Command Center")
+    with c2: fc = st.selectbox("Forecast Horizon", [6, 12, 24, 48], index=1, format_func=lambda x: f"{x} Hours")
+
+    # --- Calculations ---
     now = datetime.now()
     active = df[df['Actual_Discharge'].isnull()]
     
-    # 1. Net Flow (التدفق الصافي)
-    adm_today = len(df[df['Admit_Date'].dt.date == now.date()])
-    dis_today = len(df[(df['Actual_Discharge'].notnull()) & (df['Actual_Discharge'].dt.date == now.date())])
-    net_flow = adm_today - dis_today # الموجب يعني ضغط، السالب يعني تفريغ
+    # 1. Net Flow (Last 24h)
+    last_24h = now - timedelta(hours=24)
+    adm_24h = len(df[(df['Admit_Date'] >= last_24h)])
+    # For simulation, assume some discharges happened
+    dis_24h = int(adm_24h * 0.9) # Mock logic for MVP flow
+    net_flow = adm_24h - dis_24h
     
-    # 2. التوقعات (Forecast)
-    exp_6h = active[active['Exp_Discharge'] <= (now + timedelta(hours=6))].shape[0]
-    exp_24h = active[active['Exp_Discharge'] <= (now + timedelta(hours=24))].shape[0]
+    # 2. Delayed Discharges (Bed Blockers)
+    delayed = active[active['Exp_Discharge'] < now]
+    delayed_count = len(delayed)
     
-    # 3. الحالة العامة
+    # 3. General Stats
     total_cap = sum(d['cap'] for d in DEPARTMENTS.values())
     curr_occ = len(active)
     occ_rate = (curr_occ / total_cap) * 100
     
-    # تحديد الحالة واللون (Logic for Limits)
+    # --- AI AI General Board (The Brain) ---
+    st.markdown("---")
+    
+    # AI Logic Generation
+    ai_status = "STABLE"
+    ai_color = "#238636"
+    ai_rec = "Standard operating procedures in effect."
+    ai_risk = "None detected."
+    
     if occ_rate > 90:
-        sys_status, sys_color, css_cls = "CRITICAL", "#F85149", "txt-red"
-        ai_rec = "إيقاف العمليات الاختيارية فوراً (Activate Code Black). تحويل الحالات الجديدة للمستشفيات المساندة."
-        ai_risk = "خطر تكدس الطوارئ (ED Overcrowding) وشيك."
+        ai_status = "CRITICAL"
+        ai_color = "#DA3633"
+        ai_rec = "ACTIVATE SURGE PROTOCOL. Cancel elective surgeries. Expedite discharges in Medical Wards."
+        ai_risk = "ED Overcrowding imminent."
     elif occ_rate > 80:
-        sys_status, sys_color, css_cls = "WARNING", "#D29922", "txt-yellow"
-        ai_rec = "تسريع إجراءات الخروج للحالات المستقرة (Early Discharge)."
-        ai_risk = "الأقسام الجراحية تقترب من الامتلاء."
-    else:
-        sys_status, sys_color, css_cls = "SAFE", "#3FB950", "txt-green"
-        ai_rec = "الوضع مستقر. استمر في إجراءات التنويم القياسية."
-        ai_risk = "لا يوجد مخاطر تشغيلية حالياً."
-
-    # --- أولاً: لوحة AI العامة ---
+        ai_status = "HIGH LOAD"
+        ai_color = "#D29922"
+        ai_rec = "Prioritize morning discharges. Review ICU transfer list."
+        ai_risk = "Surgical beds at capacity."
+    elif delayed_count > 10:
+        ai_status = "BOTTLENECK"
+        ai_color = "#D29922"
+        ai_rec = f"Focus on discharging {delayed_count} delayed patients to clear capacity."
+        
     st.markdown(f"""
-    <div class="ai-box" style="border-left-color: {sys_color};">
-        <div class="ai-header">
-            <span>🤖 AI Live Situation Report</span>
-            <span style="color:{sys_color}; border:1px solid {sys_color}; padding:2px 8px; border-radius:4px;">{sys_status}</span>
+    <div class="ai-board" style="border-left-color: {ai_color};">
+        <div class="ai-title">
+            <span>🤖 AI SITUATION REPORT</span>
+            <span style="background:{ai_color}; color:white; padding:2px 8px; border-radius:4px; font-size:12px;">{ai_status}</span>
         </div>
-        <div style="margin-top:10px; font-size:14px;">
-            <div><strong>💡 التوصية الفورية:</strong> {ai_rec}</div>
-            <div style="margin-top:5px; color:#F85149;"><strong>⚠️ الخطر القادم:</strong> {ai_risk}</div>
+        <div class="ai-msg"><strong>Recommendation:</strong> {ai_rec}</div>
+        <div class="ai-msg"><strong>Impending Risk:</strong> {ai_risk}</div>
+        <div style="margin-top:10px; display:flex; gap:10px;">
+            <span class="ai-tag">Delay Count: {delayed_count}</span>
+            <span class="ai-tag">Forecast Free ({fc}h): {active[active['Exp_Discharge'] <= (now + timedelta(hours=fc))].shape[0]} Beds</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # --- ثانياً: مؤشرات المستشفى (Hospital KPIs) ---
+    # --- Hospital Level KPIs ---
     k1, k2, k3, k4, k5 = st.columns(5)
     
-    # دالة لإنشاء الكرت الملون
-    def kpi_html(label, val, note, color_class):
+    def kpi_card(label, value, delta, color="#E6EDF3"):
         return f"""
-        <div class="kpi-card">
-            <div class="kpi-title">{label}</div>
-            <div class="kpi-val {color_class}">{val}</div>
-            <div class="kpi-note">{note}</div>
+        <div class="kpi-container">
+            <div class="kpi-label">{label}</div>
+            <div class="kpi-val" style="color:{color}">{value}</div>
+            <div class="kpi-delta">{delta}</div>
         </div>
         """
-        
-    flow_cls = "txt-red" if net_flow > 0 else "txt-green"
     
-    k1.markdown(kpi_html("معدل الإشغال العام", f"{occ_rate:.1f}%", f"{curr_occ}/{total_cap} سرير", css_cls), unsafe_allow_html=True)
-    k2.markdown(kpi_html("صافي التدفق (Net Flow)", f"{net_flow:+d}", "الدخول vs الخروج", flow_cls), unsafe_allow_html=True)
-    k3.markdown(kpi_html("توقع خروج (6 ساعات)", str(exp_6h), "سرير متوقع خلوه", "txt-yellow"), unsafe_allow_html=True)
-    k4.markdown(kpi_html("توقع خروج (24 ساعة)", str(exp_24h), "سرير متوقع خلوه", "txt-green"), unsafe_allow_html=True)
+    flow_color = "#DA3633" if net_flow > 0 else "#238636"
     
-    # مؤشر تشغيلي: Turnover Interval (وهمي للمحاكاة)
-    k5.markdown(kpi_html("معدل دوران السرير", "1.4", "يوم/مريض", "txt-green"), unsafe_allow_html=True)
+    k1.markdown(kpi_card("Occupancy Rate", f"{occ_rate:.1f}%", f"{curr_occ}/{total_cap} Beds", "#58A6FF"), unsafe_allow_html=True)
+    k2.markdown(kpi_card("Net Flow (24h)", f"{net_flow:+d}", "Adm vs Disc", flow_color), unsafe_allow_html=True)
+    k3.markdown(kpi_card("Delayed Discharges", delayed_count, "Bed Blockers", "#D29922"), unsafe_allow_html=True)
+    k4.markdown(kpi_card(f"Forecast ({fc}h)", active[active['Exp_Discharge'] <= (now + timedelta(hours=fc))].shape[0], "Expected Free", "#A371F7"), unsafe_allow_html=True)
+    k5.markdown(kpi_card("Turnover Rate", "1.2", "Pat/Bed/Day", "#238636"), unsafe_allow_html=True)
 
-    st.markdown("---")
-
-    # --- ثالثاً: تفاصيل الأقسام (تطبيق النواقص) ---
-    st.subheader("🏥 حالة الأقسام (Department Status & Logic)")
+    # --- Department Matrix (Visual + Indicators) ---
+    st.markdown("### 🏥 Wards Live Status")
+    
+    # Legend
+    st.markdown("""
+    <div style="display:flex; gap:15px; font-size:11px; color:#8B949E; margin-bottom:10px;">
+        <span><span style="display:inline-block;width:10px;height:10px;background:#DA3633;margin-right:5px;"></span>Occupied</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#D29922;margin-right:5px;"></span>Delayed/Overdue</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#238636;opacity:0.3;margin-right:5px;"></span>Available</span>
+    </div>
+    """, unsafe_allow_html=True)
     
     d_cols = st.columns(3)
-    dept_list = list(DEPARTMENTS.keys())
+    d_keys = list(DEPARTMENTS.keys())
     
-    for i, d_name in enumerate(dept_list):
-        info = DEPARTMENTS[d_name]
-        d_df = active[active['Department'] == d_name]
+    for i, dept in enumerate(d_keys):
+        info = DEPARTMENTS[dept]
+        d_pats = active[active['Department'] == dept]
+        d_count = len(d_pats)
+        d_pct = (d_count / info['cap']) * 100
         
-        # 1. الإشغال
-        d_curr = len(d_df)
-        d_pct = (d_curr / info['cap']) * 100
+        # Calculate Delays in this dept
+        d_delays = d_pats[d_pats['Exp_Discharge'] < now].shape[0]
         
-        # 2. الجنس (ذكور/إناث)
-        males = len(d_df[d_df['Gender'] == "Male"])
-        females = len(d_df[d_df['Gender'] == "Female"])
-        
-        # 3. تأخر الخروج (Bed Blockers)
-        # نحسب من تجاوز وقت خروجه المتوقع
-        delayed = len(d_df[d_df['Exp_Discharge'] < now])
-        
-        # 4. عدم توافق الجنس (Mismatch)
-        mismatch_count = 0
-        if info['gen'] == 'Male': mismatch_count = females
-        elif info['gen'] == 'Female': mismatch_count = males
-        
-        # تحديد لون الكرت
-        border_col = "#3FB950" # Green
+        # Color Logic
+        border_col = "#238636"
         status_txt = "SAFE"
-        overflow_msg = ""
+        if d_pct > 85: border_col, status_txt = "#D29922", "WARNING"
+        if d_pct > 95: border_col, status_txt = "#DA3633", "CRITICAL"
         
-        if d_pct >= 90:
-            border_col = "#F85149" # Red
-            status_txt = "CRITICAL"
-            overflow_msg = f"⚠ Full! Divert to: <b>{info['overflow']}</b>"
-        elif d_pct >= 75:
-            border_col = "#D29922" # Yellow
-            status_txt = "WARNING"
+        # Bed Grid Generation
+        grid_html = '<div class="bed-grid">'
+        # 1. Delayed (Yellow/Orange)
+        for _ in range(d_delays): grid_html += '<div class="bed-box b-delay" title="Delayed Discharge"></div>'
+        # 2. Normal Occupied (Red)
+        for _ in range(d_count - d_delays): grid_html += '<div class="bed-box b-occ" title="Occupied"></div>'
+        # 3. Free (Green)
+        for _ in range(info['cap'] - d_count): grid_html += '<div class="bed-box b-free" title="Available"></div>'
+        grid_html += '</div>'
         
         with d_cols[i % 3]:
             st.markdown(f"""
-            <div class="dept-card" style="border-top: 4px solid {border_col};">
-                <div class="dept-head">
-                    <span class="dept-name">{d_name}</span>
-                    <span style="color:{border_col}; font-weight:bold; font-size:11px; border:1px solid {border_col}; padding:1px 5px; border-radius:4px;">{status_txt}</span>
+            <div class="dept-card-pro" style="border-left: 4px solid {border_col};">
+                <div class="dept-top">
+                    <span class="dept-name">{dept}</span>
+                    <span style="color:{border_col}; font-weight:bold; font-size:11px;">{status_txt}</span>
                 </div>
-                <div class="dept-metrics">
-                    <span>Occupancy: <b style="color:#E6EDF3">{d_curr}/{info['cap']}</b></span>
-                    <span>{int(d_pct)}%</span>
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:#8B949E;">
+                    <span>Occ: <b style="color:white">{d_count}</b>/{info['cap']}</span>
+                    <span>Gender: {info['gen']}</span>
                 </div>
-                <div style="background:#21262D; height:6px; border-radius:3px; margin:8px 0; overflow:hidden;">
-                    <div style="width:{min(d_pct, 100)}%; background:{border_col}; height:100%;"></div>
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:#D29922; margin-top:2px;">
+                    <span>Late Stay: <b>{d_delays}</b></span>
                 </div>
-                
-                <div style="display:flex; justify-content:space-between; margin-top:8px;">
-                    <span class="gender-badge">🚹 {males} | 🚺 {females}</span>
-                    <span class="gender-badge" style="color:#F85149">Delayed: {delayed}</span>
-                </div>
-                
-                <div style="margin-top:8px; font-size:11px;">
-                    {f'<div style="color:#F85149">⛔ Gender Mismatch: {mismatch_count}</div>' if mismatch_count > 0 else ''}
-                    <div class="overflow-alert">{overflow_msg}</div>
-                </div>
+                {grid_html}
             </div>
             """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 5. الصفحات الأخرى (إبقاء الوظائف الأساسية)
+# 5. Admissions Module
 # ---------------------------------------------------------
-elif menu == "إدارة التنويم":
-    st.title("إدارة الدخول والخروج")
-    st.info("نظام التسجيل اليدوي (تم اختصاره للتركيز على الداشبورد)")
-    st.dataframe(df.head(10), use_container_width=True)
+elif menu == "Live Admissions":
+    st.title("Admissions Center")
+    
+    # Import/Export
+    with st.expander("Data Controls"):
+        c1, c2 = st.columns(2)
+        c1.download_button("Export CSV", df.to_csv(index=False).encode('utf-8'), "data.csv", "text/csv")
+        up = c2.file_uploader("Import CSV", type=['csv'])
+        if up:
+            try:
+                new_df = pd.read_csv(up)
+                for c in ['Admit_Date', 'Exp_Discharge', 'Actual_Discharge']: new_df[c] = pd.to_datetime(new_df[c])
+                st.session_state.df = new_df
+                st.rerun()
+            except: st.error("Import Error")
 
-elif menu == "الإعدادات":
-    st.title("إعدادات النظام")
-    if st.button("إعادة ضبط المصنع (Factory Reset)"):
+    st.markdown("---")
+    st.subheader("New Patient Entry")
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        pin = st.selectbox("PIN", ["Select..."] + list(PATIENT_DB.keys()))
+        gen = PATIENT_DB.get(pin, "Unknown") if pin != "Select..." else "Unknown"
+        if pin != "Select...": st.info(f"Gender: {gen}")
+        
+        dept = st.selectbox("Ward", ["Select..."] + list(DEPARTMENTS.keys()))
+        
+        # Strict Bed Filter
+        bed_opts = ["Select Ward"]
+        if dept != "Select...":
+            occ_beds = df[(df['Department']==dept) & (df['Actual_Discharge'].isnull())]['Bed'].tolist()
+            all_beds = [f"{dept[:3].upper()}-{i+1:03d}" for i in range(DEPARTMENTS[dept]['cap'])]
+            free = [b for b in all_beds if b not in occ_beds]
+            bed_opts = free if free else ["Full"]
+        
+        bed = st.selectbox("Bed", bed_opts)
+
+    with c2:
+        now = datetime.now()
+        adm_d = st.date_input("Admit Date", now)
+        adm_t = st.time_input("Time", now.time())
+        
+        st.markdown("**Discharge Plan**")
+        ex_d = st.date_input("Target Date", now + timedelta(days=3))
+        ex_t = st.time_input("Target Time", now.time())
+        src = st.selectbox("Source", ["Emergency", "Elective", "Transfer"])
+
+    if st.button("Admit Patient", type="primary", use_container_width=True):
+        if pin != "Select..." and dept != "Select..." and bed not in ["Select Ward", "Full"]:
+            # Check Gender
+            rule = DEPARTMENTS[dept]['gen']
+            if rule != "Mixed" and rule != gen:
+                st.error(f"Gender Mismatch: {dept} is {rule} only.")
+            else:
+                new = {
+                    "PIN": pin, "Gender": gen, "Department": dept, "Bed": bed,
+                    "Admit_Date": datetime.combine(adm_d, adm_t),
+                    "Exp_Discharge": datetime.combine(ex_d, ex_t),
+                    "Actual_Discharge": None, "Source": src
+                }
+                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new])], ignore_index=True)
+                st.success("Admitted.")
+                time.sleep(0.5)
+                st.rerun()
+        else:
+            st.warning("Invalid Data")
+
+    # Active Table
+    st.markdown("### Active Inpatients")
+    active_df = df[df['Actual_Discharge'].isnull()]
+    
+    if not active_df.empty:
+        # Quick Discharge
+        sel = st.selectbox("Quick Discharge", ["Select..."] + active_df['PIN'].tolist())
+        if sel != "Select...":
+            if st.button(f"Discharge {sel}"):
+                idx = df[(df['PIN']==sel) & (df['Actual_Discharge'].isnull())].index
+                st.session_state.df.at[idx[0], 'Actual_Discharge'] = datetime.now()
+                st.success("Discharged")
+                st.rerun()
+        
+        st.dataframe(active_df[['PIN', 'Department', 'Bed', 'Admit_Date', 'Exp_Discharge']], use_container_width=True)
+
+# ---------------------------------------------------------
+# 6. Analytics (Operational KPIs)
+# ---------------------------------------------------------
+elif menu == "Analytics":
+    st.title("Operational KPIs")
+    
+    calc = df.copy()
+    now = datetime.now()
+    
+    # Metrics
+    total_adm = len(calc)
+    total_dis = len(calc[calc['Actual_Discharge'].notnull()])
+    
+    # Bed Turnover Rate (Discharges / Total Beds)
+    tot_cap = sum(d['cap'] for d in DEPARTMENTS.values())
+    turnover = (total_dis / tot_cap) if tot_cap > 0 else 0
+    
+    # Ready for Discharge (Exp date passed)
+    active = calc[calc['Actual_Discharge'].isnull()]
+    ready = active[active['Exp_Discharge'] < now].shape[0]
+    
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Admission Rate", f"{total_adm}", "Total")
+    k2.metric("Discharge Rate", f"{total_dis}", "Total")
+    k3.metric("Bed Turnover", f"{turnover:.2f}", "Rounds/Bed")
+    k4.metric("Overdue Patients", f"{ready}", "Delayed", delta_color="inverse")
+    
+    st.markdown("---")
+    
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        st.markdown("##### Admissions Flow")
+        daily = calc.groupby(calc['Admit_Date'].dt.date).size().reset_index(name='Count')
+        fig = px.area(daily, x='Admit_Date', y='Count', line_shape='spline')
+        fig.update_layout(paper_bgcolor="#0D1117", plot_bgcolor="#0D1117", font={'color':'#C9D1D9'})
+        st.plotly_chart(fig, use_container_width=True)
+        
+    with c2:
+        st.markdown("##### Efficiency Matrix")
+        eff = calc.groupby('Department').size().reset_index(name='Volume')
+        eff['Cap'] = eff['Department'].apply(lambda x: DEPARTMENTS[x]['cap'])
+        eff['Util%'] = (eff['Volume']/eff['Cap']*100).astype(int) # Mock metric
+        st.dataframe(eff.sort_values('Volume', ascending=False), hide_index=True)
+
+# ---------------------------------------------------------
+# 7. Settings
+# ---------------------------------------------------------
+elif menu == "Settings":
+    st.title("System Settings")
+    if st.button("FACTORY RESET SYSTEM", type="primary"):
         del st.session_state.df
-        st.success("تم تصفير البيانات.")
-        time.sleep(1)
+        del st.session_state.version
         st.rerun()
