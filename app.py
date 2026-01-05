@@ -8,60 +8,45 @@ import time
 import os
 
 # ---------------------------------------------------------
-# 1. System Config & Corporate Design (No Emojis)
+# 1. System Config & Design (Classic V4 Style - Professional)
 # ---------------------------------------------------------
-st.set_page_config(page_title="OccupyBed AI | Enterprise", layout="wide", page_icon=None)
+st.set_page_config(page_title="OccupyBed AI", layout="wide", page_icon=None)
 
 st.markdown("""
 <style>
-    /* Global Reset - Corporate Dark Mode */
-    .stApp { background-color: #0E1117; color: #E6EDF3; font-family: 'Segoe UI', sans-serif; }
-    [data-testid="stSidebar"] { background-color: #010409; border-right: 1px solid #30363D; }
+    /* Dark Corporate Theme */
+    .stApp { background-color: #0E1117; color: #E6EDF3; }
+    [data-testid="stSidebar"] { background-color: #000000; border-right: 1px solid #333; }
     
-    /* KPI Cards */
-    .kpi-container {
-        background: #161B22; border: 1px solid #30363D; border-radius: 6px;
-        padding: 20px; text-align: center; height: 100%;
+    /* KPI Cards - Clean & Simple */
+    .kpi-card {
+        background: #1B1F24; border: 1px solid #30363D; border-radius: 6px;
+        padding: 20px; text-align: center; margin-bottom: 10px;
     }
-    .kpi-label { font-size: 11px; color: #8B949E; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
-    .kpi-value { font-size: 28px; font-weight: 700; color: #FFF; }
-    .kpi-sub { font-size: 12px; color: #58A6FF; margin-top: 5px; }
-
-    /* AI Recommendation Box */
-    .ai-box {
-        background: #0D1117; border-left: 4px solid #A371F7; border-radius: 4px;
-        padding: 15px; margin-bottom: 15px; border: 1px solid #30363D;
-    }
-    .ai-header { font-weight: 700; color: #A371F7; font-size: 14px; margin-bottom: 8px; text-transform: uppercase; }
-    .ai-text { font-size: 13px; color: #E6EDF3; margin-bottom: 4px; }
+    .kpi-num { font-size: 32px; font-weight: bold; color: #FFF; margin: 5px 0; }
+    .kpi-lbl { font-size: 12px; color: #8B949E; text-transform: uppercase; letter-spacing: 1px; }
     
     /* Department Cards */
-    .dept-card {
-        background-color: #161B22; border: 1px solid #30363D; border-radius: 6px;
-        padding: 15px; margin-bottom: 10px;
+    .dept-box {
+        background: #0D1117; border: 1px solid #30363D; border-radius: 6px;
+        padding: 15px; margin-bottom: 12px;
     }
-    .dept-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-    .dept-title { font-size: 14px; font-weight: 700; color: #FFF; }
+    .dept-title { font-weight: 700; font-size: 15px; color: #E6EDF3; display: flex; justify-content: space-between; }
+    .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
     
-    /* Status Indicators */
-    .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
-    .bg-green { background: rgba(35, 134, 54, 0.2); color: #3FB950; border: 1px solid #238636; }
-    .bg-yellow { background: rgba(210, 153, 34, 0.2); color: #D29922; border: 1px solid #9E6A03; }
-    .bg-red { background: rgba(218, 54, 51, 0.2); color: #F85149; border: 1px solid #DA3633; }
-
-    /* Stats Rows */
-    .stat-row { display: flex; justify-content: space-between; font-size: 11px; color: #8B949E; margin-top: 4px; }
-    .stat-val { color: #E6EDF3; font-weight: 600; }
-    .val-ready { color: #A371F7; font-weight: 700; }
+    /* Status Colors */
+    .st-safe { background: #064e3b; color: #34d399; }
+    .st-warn { background: #451a03; color: #fbbf24; }
+    .st-crit { background: #450a0a; color: #f87171; }
 
     /* Inputs */
     div[data-baseweb="select"] > div, input { background-color: #0D1117 !important; border-color: #30363D !important; color: white !important; }
-    button[kind="primary"] { background-color: #238636 !important; border: none !important; color: white !important; }
+    button[kind="primary"] { background-color: #238636 !important; border: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. Logic & Data Structure
+# 2. Data & Logic (Cleaned Up)
 # ---------------------------------------------------------
 
 DEPARTMENTS = {
@@ -74,48 +59,41 @@ DEPARTMENTS = {
     "Obstetrics": {"cap": 24, "gen": "Female"},
 }
 
-# Simulated PIN DB
-PATIENT_DB = {f"PIN-{1000+i}": ("Male" if i % 2 == 0 else "Female") for i in range(2000)}
+PATIENT_DB = {f"PIN-{1000+i}": ("Male" if i % 2 == 0 else "Female") for i in range(1000)}
 
 def init_system():
-    # Only initialize if 'df' is missing.
     if 'df' not in st.session_state:
-        # Define Schema strictly
         st.session_state.df = pd.DataFrame(columns=[
-            "PIN", "Gender", "Department", "Bed", 
-            "Admit_Date", "Exp_Discharge", "Actual_Discharge", "Source"
+            "PIN", "Gender", "Department", "Bed", "Admit_Date", 
+            "Exp_Discharge", "Actual_Discharge", "Source"
         ])
         
-        # --- Generate CLEAN Initial Data (Not Overloaded) ---
-        # We will fill only ~60% of beds to allow adding new patients
-        initial_data = []
+        # Generate CLEAN Initial Data (No Overflows)
+        data = []
         for dept, info in DEPARTMENTS.items():
-            active_count = int(info['cap'] * 0.6) # 60% Occupancy initially
-            
-            for i in range(active_count):
-                bed_num = f"{dept[:3].upper()}-{i+1:03d}"
+            # Fill only 50-70% to allow space
+            count = int(info['cap'] * np.random.uniform(0.5, 0.7))
+            for i in range(count):
+                bed_n = f"{dept[:3].upper()}-{i+1:03d}"
+                adm = datetime.now() - timedelta(days=np.random.randint(0, 5), hours=np.random.randint(1, 10))
+                exp = adm + timedelta(days=np.random.randint(2, 7))
                 
-                # Dates
-                admit_dt = datetime.now() - timedelta(days=np.random.randint(1, 5), hours=np.random.randint(1, 12))
-                exp_dt = admit_dt + timedelta(days=np.random.randint(2, 7))
-                
-                initial_data.append({
+                data.append({
                     "PIN": f"PIN-{np.random.randint(1000, 9000)}",
                     "Gender": "Female" if "Female" in dept else ("Male" if "Male" in dept else np.random.choice(["Male", "Female"])),
                     "Department": dept,
-                    "Bed": bed_num,
-                    "Admit_Date": admit_dt,
-                    "Exp_Discharge": exp_dt,
-                    "Actual_Discharge": pd.NaT, # Active patients have NO actual discharge date
+                    "Bed": bed_n,
+                    "Admit_Date": adm,
+                    "Exp_Discharge": exp,
+                    "Actual_Discharge": pd.NaT, # Active
                     "Source": "Emergency"
                 })
-        
-        st.session_state.df = pd.DataFrame(initial_data)
+        st.session_state.df = pd.DataFrame(data)
 
 init_system()
 df = st.session_state.df
 
-# Ensure Date Types
+# Type Safety
 for col in ['Admit_Date', 'Exp_Discharge', 'Actual_Discharge']:
     df[col] = pd.to_datetime(df[col], errors='coerce')
 
@@ -123,319 +101,224 @@ for col in ['Admit_Date', 'Exp_Discharge', 'Actual_Discharge']:
 # 3. Sidebar
 # ---------------------------------------------------------
 with st.sidebar:
-    if os.path.exists("logo.png"):
-        st.image("logo.png", use_container_width=True)
-    else:
-        st.header("OccupyBed AI")
+    if os.path.exists("logo.png"): st.image("logo.png", use_container_width=True)
+    else: st.header("OccupyBed AI")
     
     st.markdown("---")
-    menu = st.radio("MENU", ["Overview", "Live Admissions", "KPIs", "Settings"], label_visibility="collapsed")
+    menu = st.radio("MENU", ["Overview", "Live Admissions", "Analytics", "Settings"], label_visibility="collapsed")
     st.markdown("---")
-    st.caption("System Status: Online")
+    st.caption("System Status: **Online**")
 
 # ---------------------------------------------------------
-# 4. OVERVIEW (Real-time Dashboard)
+# 4. Overview (Dashboard)
 # ---------------------------------------------------------
 if menu == "Overview":
     c1, c2 = st.columns([3, 1])
-    with c1: st.title("Hospital Command Center")
-    with c2: 
-        fc_hours = st.selectbox("Forecast Window", [6, 12, 24, 48, 72], index=2, format_func=lambda x: f"{x} Hours")
+    with c1: st.title("Real-time Overview")
+    with c2: fc = st.selectbox("Forecast Window", [6, 12, 24, 48, 72], index=2, format_func=lambda x: f"{x} Hours")
 
-    # --- 1. Global Metrics (Live Calculations) ---
+    # Metrics
     now = datetime.now()
-    # Active = Rows where Actual_Discharge is NULL (NaT)
-    active_df = df[df['Actual_Discharge'].isna()]
+    active = df[df['Actual_Discharge'].isna()]
     
-    total_capacity = sum(d['cap'] for d in DEPARTMENTS.values())
-    occupied_count = len(active_df)
-    available_count = total_capacity - occupied_count
+    total_cap = sum(d['cap'] for d in DEPARTMENTS.values())
+    occ = len(active)
+    avail = total_cap - occ
     
-    # Ready to Discharge Logic:
-    # Active Patients AND Expected Discharge is BEFORE (Now + Forecast Window)
-    future_limit = now + timedelta(hours=fc_hours)
-    ready_df = active_df[active_df['Exp_Discharge'] <= future_limit]
-    ready_count = len(ready_df)
+    # Calculate Expected Free based on Window
+    future = now + timedelta(hours=fc)
+    exp_free = active[active['Exp_Discharge'] <= future].shape[0]
 
-    # Net Flow (Last 24h)
-    last_24h = now - timedelta(hours=24)
-    admissions_24h = len(df[df['Admit_Date'] >= last_24h])
-    discharges_24h = len(df[df['Actual_Discharge'] >= last_24h])
-    net_flow = admissions_24h - discharges_24h
-
-    # --- 2. AI Suggestions (Text Based) ---
-    st.markdown(f"""<div class="ai-box"><div class="ai-header">🤖 AI Operational Recommendations</div>""", unsafe_allow_html=True)
-    ai_alerts = 0
-    for dept, info in DEPARTMENTS.items():
-        d_pats = active_df[active_df['Department'] == dept]
-        pct = (len(d_pats) / info['cap']) * 100
-        delayed = len(d_pats[d_pats['Exp_Discharge'] < now]) # Already passed expected time
-        
-        if pct >= 85:
-            st.markdown(f"""<div class="ai-text" style="color:#F85149"><b>{dept}:</b> High occupancy ({int(pct)}%). Expedite pending discharges.</div>""", unsafe_allow_html=True)
-            ai_alerts += 1
-        elif delayed > 3:
-            st.markdown(f"""<div class="ai-text" style="color:#D29922"><b>{dept}:</b> {delayed} patients exceeding expected stay. Coordinate with physicians.</div>""", unsafe_allow_html=True)
-            ai_alerts += 1
-            
-    if ai_alerts == 0:
-        st.markdown(f"""<div class="ai-text" style="color:#3FB950">Hospital capacity is optimal. No critical actions required.</div>""", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # --- 3. KPI Cards ---
+    # KPI Cards
     k1, k2, k3, k4 = st.columns(4)
-    with k1:
-        st.markdown(f"""<div class="kpi-container"><div class="kpi-label">Total Licensed Beds</div><div class="kpi-value" style="color:#58A6FF">{total_capacity}</div></div>""", unsafe_allow_html=True)
-    with k2:
-        st.markdown(f"""<div class="kpi-container"><div class="kpi-label">Occupied Beds</div><div class="kpi-value" style="color:#D29922">{occupied_count}</div></div>""", unsafe_allow_html=True)
-    with k3:
-        st.markdown(f"""<div class="kpi-container"><div class="kpi-label">Available Now</div><div class="kpi-value" style="color:#3FB950">{available_count}</div></div>""", unsafe_allow_html=True)
-    with k4:
-        st.markdown(f"""<div class="kpi-container"><div class="kpi-label">Expected Free ({fc_hours}h)</div><div class="kpi-value" style="color:#A371F7">{ready_count}</div></div>""", unsafe_allow_html=True)
+    k1.markdown(f"""<div class="kpi-card"><div class="kpi-lbl">Total Beds</div><div class="kpi-num" style="color:#3b82f6">{total_cap}</div></div>""", unsafe_allow_html=True)
+    k2.markdown(f"""<div class="kpi-card"><div class="kpi-lbl">Occupied</div><div class="kpi-num" style="color:#eab308">{occ}</div></div>""", unsafe_allow_html=True)
+    k3.markdown(f"""<div class="kpi-card"><div class="kpi-lbl">Available</div><div class="kpi-num" style="color:#22c55e">{avail}</div></div>""", unsafe_allow_html=True)
+    k4.markdown(f"""<div class="kpi-card"><div class="kpi-lbl">Exp. Free ({fc}h)</div><div class="kpi-num" style="color:#a855f7">{exp_free}</div></div>""", unsafe_allow_html=True)
 
-    # --- 4. File Management (Upload/Download) ---
-    with st.expander("📂 Data Management (CSV Import/Export)", expanded=False):
-        c1, c2 = st.columns(2)
-        with c1:
-            st.download_button("Download Database (CSV)", df.to_csv(index=False).encode('utf-8'), "hospital_db.csv", "text/csv")
-        with c2:
-            up_file = st.file_uploader("Upload Database (CSV)", type=['csv'])
-            if up_file:
-                try:
-                    new_df = pd.read_csv(up_file)
-                    # Force conversion
-                    for col in ['Admit_Date', 'Exp_Discharge', 'Actual_Discharge']:
-                        new_df[col] = pd.to_datetime(new_df[col], errors='coerce')
-                    st.session_state.df = new_df
-                    st.success("Database Updated Successfully!")
-                    time.sleep(1)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error reading file: {e}")
+    # File Ops (Requested Placement)
+    with st.expander("📂 Data Management"):
+        c_dl, c_up = st.columns(2)
+        c_dl.download_button("Download CSV", df.to_csv(index=False).encode('utf-8'), "data.csv", "text/csv")
+        up_f = c_up.file_uploader("Upload CSV", type=['csv'])
+        if up_f:
+            try:
+                new_df = pd.read_csv(up_f)
+                for col in ['Admit_Date', 'Exp_Discharge', 'Actual_Discharge']: new_df[col] = pd.to_datetime(new_df[col])
+                st.session_state.df = new_df
+                st.rerun()
+            except: st.error("Error")
 
-    st.markdown("---")
-
-    # --- 5. Department Cards ---
+    # Department Grid
     st.markdown("### Department Status")
-    cols = st.columns(3)
+    d_cols = st.columns(3)
     dept_names = list(DEPARTMENTS.keys())
     
     for i, dept in enumerate(dept_names):
         info = DEPARTMENTS[dept]
-        d_df = active_df[active_df['Department'] == dept]
-        
-        occ = len(d_df)
-        cap = info['cap']
-        avail = cap - occ
-        ready = len(d_df[d_df['Exp_Discharge'] <= future_limit])
-        pct = (occ / cap) * 100
+        d_df = active[active['Department'] == dept]
+        d_occ = len(d_df)
+        d_pct = (d_occ / info['cap']) * 100
+        d_ready = d_df[d_df['Exp_Discharge'] <= future].shape[0]
         
         # Color Logic
-        if pct < 70:
-            status = "SAFE"
-            cls = "bg-green"
-            bar = "#3FB950"
-        elif 70 <= pct <= 84:
-            status = "WARNING"
-            cls = "bg-yellow"
-            bar = "#D29922"
-        else:
-            status = "CRITICAL"
-            cls = "bg-red"
-            bar = "#F85149"
-            
-        with cols[i % 3]:
+        if d_pct < 70: status, cls = "SAFE", "st-safe"
+        elif 70 <= d_pct <= 84: status, cls = "WARNING", "st-warn"
+        else: status, cls = "CRITICAL", "st-crit"
+        
+        with d_cols[i % 3]:
             st.markdown(f"""
-            <div class="dept-card">
-                <div class="dept-header">
-                    <span class="dept-title">{dept}</span>
+            <div class="dept-box">
+                <div class="dept-title">
+                    <span>{dept}</span>
                     <span class="status-badge {cls}">{status}</span>
                 </div>
-                <div class="stat-row"><span>Capacity: {cap}</span> <span>Occupied: {occ}</span></div>
-                <div class="stat-row"><span>Available: {avail}</span> <span class="val-ready">Exp. Free ({fc_hours}h): {ready}</span></div>
-                <div style="background:#21262D; height:6px; border-radius:3px; margin-top:8px;">
-                    <div style="width:{min(pct, 100)}%; background:{bar}; height:100%; border-radius:3px;"></div>
+                <div style="font-size:12px; color:#8B949E; margin-top:10px; display:flex; justify-content:space-between;">
+                    <span>Cap: {info['cap']}</span>
+                    <span>Occ: <b style="color:white">{d_occ}</b></span>
+                    <span>Free: {info['cap']-d_occ}</span>
+                </div>
+                <div style="font-size:12px; color:#a855f7; margin-top:5px; font-weight:bold;">
+                    Exp. Free ({fc}h): {d_ready}
+                </div>
+                <div style="background:#21262D; height:5px; margin-top:8px; border-radius:3px;">
+                    <div style="width:{min(d_pct,100)}%; height:100%; background:{'#22c55e' if d_pct<70 else '#eab308' if d_pct<85 else '#ef4444'};"></div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 5. Live Admissions & Discharge (CRITICAL FIXES HERE)
+# 5. Live Admissions (Fixed Dates & Discharge)
 # ---------------------------------------------------------
 elif menu == "Live Admissions":
-    st.title("Patient Admission & Discharge Center")
+    st.title("Admission & Discharge Center")
     
-    # --- Part A: New Admission ---
+    # --- Part 1: Admission Form ---
     with st.expander("➕ Admit New Patient", expanded=True):
         c1, c2 = st.columns(2)
         with c1:
             pin = st.selectbox("Select Patient PIN", ["Select..."] + list(PATIENT_DB.keys()))
             gender = PATIENT_DB.get(pin, "Unknown") if pin != "Select..." else "Unknown"
-            if pin != "Select...": st.info(f"System Identified: **{gender}**")
+            if pin != "Select...": st.info(f"Gender: **{gender}**")
             
             dept = st.selectbox("Assign Department", ["Select..."] + list(DEPARTMENTS.keys()))
             
-            # Bed Logic: Only show EMPTY beds
-            bed_opts = ["Select Department First"]
+            # Filter Beds
+            bed_opts = ["Select Dept"]
             if dept != "Select...":
-                # Find occupied beds in this dept (Active patients only)
-                active_in_dept = df[(df['Department'] == dept) & (df['Actual_Discharge'].isna())]
-                occupied_beds = active_in_dept['Bed'].tolist()
+                if DEPARTMENTS[dept]['gen'] != "Mixed" and DEPARTMENTS[dept]['gen'] != gender:
+                    st.error(f"Gender Mismatch! {dept} is {DEPARTMENTS[dept]['gen']} Only.")
                 
-                # Generate all beds
-                cap = DEPARTMENTS[dept]['cap']
-                all_beds = [f"{dept[:3].upper()}-{i+1:03d}" for i in range(cap)]
-                
-                # Filter available
-                free_beds = [b for b in all_beds if b not in occupied_beds]
-                bed_opts = free_beds if free_beds else ["NO BEDS AVAILABLE"]
-            
+                occ_beds = df[(df['Department'] == dept) & (df['Actual_Discharge'].isna())]['Bed'].tolist()
+                all_beds = [f"{dept[:3].upper()}-{i+1:03d}" for i in range(DEPARTMENTS[dept]['cap'])]
+                free_beds = [b for b in all_beds if b not in occ_beds]
+                bed_opts = free_beds if free_beds else ["NO BEDS"]
             bed = st.selectbox("Assign Bed", bed_opts)
 
         with c2:
-            st.markdown("###### Timing & Source")
+            # FIXED: Date & Time Pickers
+            st.markdown("###### Admission Time")
             d1, t1 = st.columns(2)
-            adm_d = d1.date_input("Admission Date", datetime.now())
-            adm_t = t1.time_input("Admission Time", datetime.now().time())
+            adm_d = d1.date_input("Date", datetime.now())
+            adm_t = t1.time_input("Time", datetime.now().time())
             
-            # FIXED: Expected Discharge Date & Time (Not days)
-            st.markdown("###### Discharge Plan")
+            st.markdown("###### Expected Discharge")
             d2, t2 = st.columns(2)
-            exp_d = d2.date_input("Expected Date", datetime.now() + timedelta(days=3))
-            exp_t = t2.time_input("Expected Time", datetime.now().time())
+            exp_d = d2.date_input("Exp Date", datetime.now() + timedelta(days=3))
+            exp_t = t2.time_input("Exp Time", datetime.now().time())
             
             src = st.selectbox("Source", ["Emergency", "Elective", "Transfer"])
 
         if st.button("Confirm Admission", type="primary", use_container_width=True):
-            if pin != "Select..." and dept != "Select..." and bed not in ["Select Department First", "NO BEDS AVAILABLE"]:
-                # Check Gender
-                dept_gen = DEPARTMENTS[dept]['gen']
-                if dept_gen != "Mixed" and dept_gen != gender:
-                    st.error(f"Gender Mismatch: {dept} is {dept_gen} Only.")
-                else:
-                    new_rec = {
-                        "PIN": pin, "Gender": gender, "Department": dept, "Bed": bed,
-                        "Admit_Date": datetime.combine(adm_d, adm_t),
-                        "Exp_Discharge": datetime.combine(exp_d, exp_t),
-                        "Actual_Discharge": pd.NaT, # Important: Set to NaT (Not a Time)
-                        "Source": src
-                    }
-                    # Append new record
-                    st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new_rec])], ignore_index=True)
-                    st.success("Patient Admitted Successfully.")
-                    time.sleep(0.5)
-                    st.rerun()
+            if pin != "Select..." and dept != "Select..." and bed not in ["Select Dept", "NO BEDS"]:
+                new_rec = {
+                    "PIN": pin, "Gender": gender, "Department": dept, "Bed": bed,
+                    "Admit_Date": datetime.combine(adm_d, adm_t),
+                    "Exp_Discharge": datetime.combine(exp_d, exp_t),
+                    "Actual_Discharge": pd.NaT,
+                    "Source": src
+                }
+                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new_rec])], ignore_index=True)
+                st.success("Admitted Successfully.")
+                time.sleep(0.5)
+                st.rerun()
             else:
-                st.warning("Please complete all fields.")
+                st.warning("Please check fields.")
 
     st.markdown("---")
 
-    # --- Part B: Current Inpatients & Discharge ---
-    st.subheader("Current Inpatients (Real-time)")
-    
-    # Filter only active patients (Actual_Discharge is NaN)
-    active_df = df[df['Actual_Discharge'].isna()].copy()
+    # --- Part 2: Discharge / Active List ---
+    st.subheader("Current Inpatients (Manage & Discharge)")
+    active_df = df[df['Actual_Discharge'].isna()].sort_values(by="Admit_Date", ascending=False)
     
     if not active_df.empty:
-        # Sort by Admission Date
-        active_df = active_df.sort_values(by="Admit_Date", ascending=False)
-        
-        # 1. Select Patient to Discharge
-        p_list = active_df.apply(lambda x: f"{x['PIN']} | {x['Department']} | {x['Bed']}", axis=1).tolist()
-        target = st.selectbox("Select Patient to Discharge / Update", ["Select..."] + p_list)
+        # Discharge UI
+        target = st.selectbox("Select Patient to Discharge", ["Select..."] + active_df['PIN'].tolist())
         
         if target != "Select...":
-            t_pin, t_dept, t_bed = target.split(" | ")
-            st.info(f"Processing Discharge for: **{t_pin}**")
+            row = active_df[active_df['PIN'] == target].iloc[0]
+            st.warning(f"Discharging: **{row['PIN']}** from **{row['Bed']}**")
             
-            # 2. Input Actual Discharge Date/Time
+            # Actual Discharge Time
             dc1, dc2 = st.columns(2)
             act_d = dc1.date_input("Actual Discharge Date", datetime.now())
             act_t = dc2.time_input("Actual Discharge Time", datetime.now().time())
             
-            # 3. Confirm Button
-            if st.button("Confirm Discharge & Remove from Active List"):
-                # Find the index in the MAIN dataframe
-                # Criteria: PIN match, Bed match, and currently active (NaT)
-                idx = df[
-                    (df['PIN'] == t_pin) & 
-                    (df['Bed'] == t_bed) & 
-                    (df['Actual_Discharge'].isna())
-                ].index
+            if st.button("Confirm Discharge"):
+                idx = df[(df['PIN'] == target) & (df['Actual_Discharge'].isna())].index
+                st.session_state.df.at[idx[0], 'Actual_Discharge'] = datetime.combine(act_d, act_t)
+                st.success("Patient Discharged.")
+                time.sleep(0.5)
+                st.rerun()
                 
-                if not idx.empty:
-                    # Update the record with the actual timestamp
-                    final_dt = datetime.combine(act_d, act_t)
-                    st.session_state.df.loc[idx[0], 'Actual_Discharge'] = final_dt
-                    
-                    st.success("Patient Discharged! Removing from Active List...")
-                    time.sleep(1)
-                    st.rerun() # Refresh to update table immediately
-                else:
-                    st.error("Error: Could not find active record.")
-
-        # Show Table (Columns requested)
-        st.dataframe(
-            active_df[['PIN', 'Department', 'Bed', 'Gender', 'Admit_Date', 'Exp_Discharge', 'Source']], 
-            use_container_width=True,
-            hide_index=True
-        )
+        st.dataframe(active_df[['PIN', 'Department', 'Bed', 'Admit_Date', 'Exp_Discharge']], use_container_width=True)
     else:
-        st.info("No active patients. All beds are free.")
+        st.info("No active patients.")
 
 # ---------------------------------------------------------
-# 6. KPI / Analytics (Fixed Data Visualization)
+# 6. Analytics
 # ---------------------------------------------------------
-elif menu == "KPIs":
-    st.title("Operational KPIs")
+elif menu == "Analytics":
+    st.title("Operational Analytics")
     
-    # Use full dataset (History + Active)
     calc = df.copy()
     now = datetime.now()
     
-    # Fix NaT issues for calculations
-    calc['Discharge_Calc'] = calc['Actual_Discharge'].fillna(now)
-    
-    # 1. Average Length of Stay (ALOS)
-    calc['LOS_Days'] = (calc['Discharge_Calc'] - calc['Admit_Date']).dt.total_seconds() / 86400
-    avg_los = calc['LOS_Days'].mean()
-    
-    # 2. Admission by Source
-    k1, k2, k3, k4 = st.columns(4)
-    total_adm = len(calc)
-    total_dis = len(calc[calc['Actual_Discharge'].notnull()])
-    
-    k1.metric("Total Patients Processed", total_adm)
-    k2.metric("Total Discharged", total_dis)
-    k3.metric("Avg Length of Stay", f"{avg_los:.1f} Days")
-    k4.metric("Bed Turnover Rate", "1.4", "Patients/Bed")
-    
-    st.markdown("---")
-    
+    # 1. Admission by Source
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("##### Admissions by Source")
+        st.markdown("###### Admissions by Source")
         if not calc.empty:
-            fig1 = px.pie(calc, names='Source', hole=0.6, color_discrete_sequence=px.colors.qualitative.Pastel)
-            fig1.update_layout(paper_bgcolor="#0E1117", font={'color': "#FFF"})
-            st.plotly_chart(fig1, use_container_width=True)
+            fig = px.pie(calc, names='Source', hole=0.5, color_discrete_sequence=px.colors.qualitative.Pastel)
+            fig.update_layout(paper_bgcolor="#0E1117", font={'color': "white"})
+            st.plotly_chart(fig, use_container_width=True)
             
+    # 2. LOS
     with c2:
-        st.markdown("##### Length of Stay Distribution")
-        if not calc.empty:
-            fig2 = px.histogram(calc, x="LOS_Days", nbins=10, color_discrete_sequence=['#58A6FF'])
-            fig2.update_layout(paper_bgcolor="#0E1117", font={'color': "#FFF"}, xaxis_title="Days", yaxis_title="Count")
+        st.markdown("###### Length of Stay Analysis")
+        # Calculate LOS for discharged only
+        discharged = calc[calc['Actual_Discharge'].notnull()].copy()
+        if not discharged.empty:
+            discharged['LOS'] = (discharged['Actual_Discharge'] - discharged['Admit_Date']).dt.total_seconds() / 86400
+            fig2 = px.box(discharged, x="Department", y="LOS", color="Department")
+            fig2.update_layout(paper_bgcolor="#0E1117", font={'color': "white"}, showlegend=False)
             st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.info("No discharge data yet.")
+
+    # 3. Efficiency Table
+    st.markdown("###### Department Efficiency")
+    mat = calc.groupby('Department').size().reset_index(name='Total_Admissions')
+    mat['Capacity'] = mat['Department'].apply(lambda x: DEPARTMENTS[x]['cap'])
+    st.dataframe(mat, use_container_width=True)
 
 # ---------------------------------------------------------
-# 7. Settings (Factory Reset)
+# 7. Settings
 # ---------------------------------------------------------
 elif menu == "Settings":
-    st.title("System Settings")
-    st.warning("Use this to clear all data and start fresh (solves 'Ghost Data' issues).")
-    
-    if st.button("FACTORY RESET (Clear All Data)", type="primary"):
+    st.title("Settings")
+    if st.button("Factory Reset (Clear All Data)", type="primary"):
         del st.session_state.df
-        st.success("System Reset Complete.")
+        st.success("System Cleared.")
         time.sleep(1)
         st.rerun()
