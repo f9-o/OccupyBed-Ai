@@ -21,8 +21,9 @@ st.markdown("""
     /* KPI Cards */
     .kpi-card {
         background-color: #161B22; border: 1px solid #30363D; border-radius: 6px;
-        padding: 20px; text-align: center; height: 100%;
+        padding: 20px; text-align: center; height: 100%; transition: all 0.3s;
     }
+    .kpi-card:hover { border-color: #58A6FF; transform: scale(1.02); }
     .kpi-label { font-size: 11px; color: #8B949E; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
     .kpi-val { font-size: 32px; font-weight: 700; color: #FFF; margin: 0; }
     
@@ -47,6 +48,17 @@ st.markdown("""
     .bg-green { background: rgba(35, 134, 54, 0.2); color: #3FB950; border: 1px solid #238636; }
     .bg-yellow { background: rgba(210, 153, 34, 0.2); color: #D29922; border: 1px solid #9E6A03; }
     .bg-red { background: rgba(218, 54, 51, 0.2); color: #F85149; border: 1px solid #DA3633; }
+
+    /* Animation Pulse for Live Mode */
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(255, 0, 0, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
+    }
+    .live-indicator {
+        display: inline-block; width: 10px; height: 10px; background: red; border-radius: 50%;
+        animation: pulse 2s infinite; margin-right: 5px;
+    }
 
     /* Inputs & Buttons */
     div[data-baseweb="select"] > div, input { background-color: #0D1117 !important; border-color: #30363D !important; color: white !important; }
@@ -77,17 +89,15 @@ def init_system():
             "Admit_Date", "Exp_Discharge", "Actual_Discharge", "Source"
         ])
         
-        # --- GENERATE SAFE SIMULATION DATA ---
+        # --- GENERATE SAFE INITIAL DATA ---
         data = []
         for dept, info in DEPARTMENTS.items():
             # Safety Logic: Occupancy between 40% and 70% (Never Full)
-            safe_count = int(info['cap'] * np.random.uniform(0.4, 0.7))
+            safe_count = int(info['cap'] * np.random.uniform(0.4, 0.6))
             
             for i in range(safe_count):
                 bed_n = f"{dept[:3].upper()}-{i+1:03d}"
-                # Random Dates
                 adm = datetime.now() - timedelta(days=np.random.randint(0, 5), hours=np.random.randint(1, 10))
-                # Mixed: Some ready to go, some staying
                 if np.random.random() < 0.3:
                     exp = datetime.now() + timedelta(hours=np.random.randint(2, 24))
                 else:
@@ -103,7 +113,6 @@ def init_system():
                     "Actual_Discharge": pd.NaT, # Active
                     "Source": np.random.choice(["Emergency", "Elective", "Transfer"])
                 })
-        
         st.session_state.df = pd.DataFrame(data)
 
 init_system()
@@ -114,19 +123,83 @@ for col in ['Admit_Date', 'Exp_Discharge', 'Actual_Discharge']:
     df[col] = pd.to_datetime(df[col], errors='coerce')
 
 # ---------------------------------------------------------
-# 3. Sidebar
+# 3. AUTOMATED SIMULATION ENGINE (The 7s Update)
+# ---------------------------------------------------------
+def run_simulation_step():
+    """Simulates hospital activity: Discharges or Admits a patient."""
+    action = np.random.choice(['admit', 'discharge'], p=[0.55, 0.45]) # Slight bias to admission
+    
+    if action == 'discharge':
+        # Find an active patient to discharge
+        active_indices = df[df['Actual_Discharge'].isna()].index
+        if not active_indices.empty:
+            target_idx = np.random.choice(active_indices)
+            # Discharge them now
+            st.session_state.df.at[target_idx, 'Actual_Discharge'] = datetime.now()
+            st.toast(f"🔄 SYSTEM UPDATE: Patient {df.at[target_idx, 'PIN']} Discharged.", icon="📤")
+            
+    elif action == 'admit':
+        # Find a department with space
+        for dept in np.random.permutation(list(DEPARTMENTS.keys())):
+            info = DEPARTMENTS[dept]
+            active_in_dept = df[(df['Department'] == dept) & (df['Actual_Discharge'].isna())]
+            if len(active_in_dept) < info['cap']:
+                # Admit here
+                new_pin = f"PIN-{np.random.randint(3000, 9999)}"
+                bed_num = f"{dept[:3].upper()}-{len(active_in_dept)+1:03d}"
+                new_row = {
+                    "PIN": new_pin,
+                    "Gender": "Female" if "Female" in dept else "Male", 
+                    "Department": dept,
+                    "Bed": bed_num,
+                    "Admit_Date": datetime.now(),
+                    "Exp_Discharge": datetime.now() + timedelta(days=3),
+                    "Actual_Discharge": pd.NaT,
+                    "Source": "Emergency"
+                }
+                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new_row])], ignore_index=True)
+                st.toast(f"🚨 LIVE: New Admission to {dept} ({new_pin})", icon="➕")
+                break
+
+# ---------------------------------------------------------
+# 4. Sidebar & Simulation Control
 # ---------------------------------------------------------
 with st.sidebar:
     if os.path.exists("logo.png"): st.image("logo.png", use_container_width=True)
     else: st.header("OccupyBed AI")
     
+    # --- PATIENT SEARCH (NEW ADDITION) ---
+    st.markdown("### 🔍 Patient Search")
+    search_q = st.text_input("Enter PIN", placeholder="e.g. PIN-2005")
+    if search_q:
+        res = df[df['PIN'] == search_q]
+        if not res.empty:
+            # Check latest status (most recent entry for this PIN)
+            latest = res.iloc[-1]
+            status = "Active 🟢" if pd.isna(latest['Actual_Discharge']) else "Discharged 🔴"
+            st.success(f"**Found:** {latest['Department']}")
+            st.info(f"**Bed:** {latest['Bed']}")
+            st.caption(f"**Status:** {status}")
+        else:
+            st.warning("Patient not found.")
+
+    st.markdown("---")
+    
+    # --- SIMULATION TOGGLE ---
+    st.markdown("### ⚡ Simulation Mode")
+    sim_mode = st.toggle("Active Live Simulation", value=False, help="Updates data every 7 seconds")
+    
+    if sim_mode:
+        st.markdown(f"<div style='color:#F85149; font-weight:bold;'><span class='live-indicator'></span>LIVE FEED ACTIVE</div>", unsafe_allow_html=True)
+        st.caption("Auto-refreshing every 7s...")
+    
     st.markdown("---")
     menu = st.radio("NAVIGATION", ["Overview", "Live Admissions", "Operational Analytics", "Settings"], label_visibility="collapsed")
     st.markdown("---")
-    st.caption("System Online")
+    st.caption("System Online | MVP v1.0")
 
 # ---------------------------------------------------------
-# 4. OVERVIEW (Layout Fixed)
+# 5. OVERVIEW
 # ---------------------------------------------------------
 if menu == "Overview":
     c1, c2 = st.columns([3, 1])
@@ -134,7 +207,7 @@ if menu == "Overview":
     with c2: 
         fc_hours = st.selectbox("Forecast Window", [6, 12, 24, 48, 72], index=2, format_func=lambda x: f"{x} Hours")
 
-    # --- Calculations ---
+    # Metrics
     now = datetime.now()
     active_df = df[df['Actual_Discharge'].isna()]
     future_limit = now + timedelta(hours=fc_hours)
@@ -144,7 +217,7 @@ if menu == "Overview":
     avail_count = total_cap - occ_count
     ready_count = len(active_df[active_df['Exp_Discharge'] <= future_limit])
 
-    # --- 1. KPI Cards (Top) ---
+    # KPI Cards
     k1, k2, k3, k4 = st.columns(4)
     with k1: st.markdown(f"""<div class="kpi-card"><div class="kpi-label">Total Licensed Beds</div><div class="kpi-val" style="color:#58A6FF">{total_cap}</div></div>""", unsafe_allow_html=True)
     with k2: st.markdown(f"""<div class="kpi-card"><div class="kpi-label">Occupied Beds</div><div class="kpi-val" style="color:#D29922">{occ_count}</div></div>""", unsafe_allow_html=True)
@@ -153,11 +226,9 @@ if menu == "Overview":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # --- 2. Gauge + AI (Middle) ---
+    # Gauge & AI
     g_col, ai_col = st.columns([1, 2])
-    
     with g_col:
-        # Hospital Pressure Gauge
         occ_rate = (occ_count / total_cap) * 100 if total_cap > 0 else 0
         fig = go.Figure(go.Indicator(
             mode = "gauge+number", value = occ_rate,
@@ -184,7 +255,7 @@ if menu == "Overview":
             if pct >= 85:
                 st.markdown(f"""<div class="ai-item"><span style="color:#F85149"><b>{dept}:</b></span> Critical load ({int(pct)}%). Redirect new admissions to {info['overflow']}.</div>""", unsafe_allow_html=True)
                 ai_triggered = True
-            elif pct >= 70: # YELLOW WARNING
+            elif pct >= 70:
                 st.markdown(f"""<div class="ai-item"><span style="color:#D29922"><b>{dept}:</b></span> High Load ({int(pct)}%). Prepare discharge lounge.</div>""", unsafe_allow_html=True)
                 ai_triggered = True
                 
@@ -194,7 +265,7 @@ if menu == "Overview":
 
     st.markdown("---")
 
-    # --- 3. Department Grid (Bottom) ---
+    # Department Grid
     st.markdown("### Department Live Status")
     d_cols = st.columns(3)
     dept_names = list(DEPARTMENTS.keys())
@@ -239,11 +310,11 @@ if menu == "Overview":
 elif menu == "Live Admissions":
     st.title("Patient Admission & Discharge Center")
     
-    # --- Part 0: Data Management ---
+    # Data Ops
     with st.expander("📂 Data Operations (Import / Export)", expanded=False):
         c_dl, c_ul = st.columns(2)
         with c_dl:
-            st.download_button("Download System Data (CSV)", df.to_csv(index=False).encode('utf-8'), "hospital_db.csv", "text/csv")
+            st.download_button("Download Data (CSV)", df.to_csv(index=False).encode('utf-8'), "hospital_db.csv", "text/csv")
         with c_ul:
             up_file = st.file_uploader("Upload Data (CSV)", type=['csv'])
             if up_file:
@@ -252,11 +323,11 @@ elif menu == "Live Admissions":
                     for col in ['Admit_Date', 'Exp_Discharge', 'Actual_Discharge']: 
                         new_df[col] = pd.to_datetime(new_df[col], errors='coerce')
                     st.session_state.df = new_df
-                    st.success("Data Imported Successfully.")
+                    st.success("Data Imported.")
                     st.rerun()
                 except: st.error("Invalid File")
 
-    # --- Part A: Admission Form ---
+    # Admission Form
     st.subheader("1. New Admission")
     c1, c2 = st.columns(2)
     with c1:
@@ -266,7 +337,6 @@ elif menu == "Live Admissions":
         
         dept = st.selectbox("Assign Department", ["Select..."] + list(DEPARTMENTS.keys()))
         
-        # Bed Logic
         bed_opts = ["Select Dept"]
         if dept != "Select...":
             occ_beds = df[(df['Department'] == dept) & (df['Actual_Discharge'].isna())]['Bed'].tolist()
@@ -276,86 +346,61 @@ elif menu == "Live Admissions":
         bed = st.selectbox("Assign Bed", bed_opts)
 
     with c2:
-        # Date/Time Logic
-        st.markdown("###### Admission Timing")
         d1, t1 = st.columns(2)
         adm_d = d1.date_input("Date", datetime.now())
         adm_t = t1.time_input("Time", datetime.now().time())
-        
-        st.markdown("###### Expected Discharge")
         d2, t2 = st.columns(2)
         exp_d = d2.date_input("Exp Date", datetime.now() + timedelta(days=3))
         exp_t = t2.time_input("Exp Time", datetime.now().time())
-        
         src = st.selectbox("Source", ["Emergency", "Elective", "Transfer"])
 
     if st.button("Confirm Admission", type="primary"):
-        # Check Duplicate Active PIN
-        is_active = not df[(df['PIN'] == pin) & (df['Actual_Discharge'].isna())].empty
-        
-        if pin == "Select..." or dept == "Select..." or bed in ["Select Dept", "NO BEDS AVAILABLE"]:
-            st.warning("Please complete all fields.")
-        elif is_active:
-            st.error(f"Error: Patient {pin} is ALREADY admitted. You must discharge them first.")
-        else:
-            # Check Gender
-            if DEPARTMENTS[dept]['gen'] != "Mixed" and DEPARTMENTS[dept]['gen'] != gender:
-                st.error(f"Gender Mismatch: {dept} is {DEPARTMENTS[dept]['gen']} Only.")
-            else:
-                new_rec = {
-                    "PIN": pin, "Gender": gender, "Department": dept, "Bed": bed,
-                    "Admit_Date": datetime.combine(adm_d, adm_t),
-                    "Exp_Discharge": datetime.combine(exp_d, exp_t),
-                    "Actual_Discharge": pd.NaT,
-                    "Source": src
-                }
-                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new_rec])], ignore_index=True)
-                st.success("Admitted Successfully.")
-                time.sleep(0.5)
-                st.rerun()
+        if pin != "Select..." and dept != "Select..." and bed not in ["Select Dept", "NO BEDS AVAILABLE"]:
+            new_rec = {
+                "PIN": pin, "Gender": gender, "Department": dept, "Bed": bed,
+                "Admit_Date": datetime.combine(adm_d, adm_t),
+                "Exp_Discharge": datetime.combine(exp_d, exp_t),
+                "Actual_Discharge": pd.NaT,
+                "Source": src
+            }
+            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new_rec])], ignore_index=True)
+            st.success("Admitted.")
+            time.sleep(0.5)
+            st.rerun()
 
     st.markdown("---")
 
-    # --- Part B: Discharge Management ---
-    st.subheader("2. Current Inpatients & Discharge")
+    # Discharge
+    st.subheader("2. Discharge Management")
     active_df = df[df['Actual_Discharge'].isna()].sort_values(by="Admit_Date", ascending=False)
     
     if not active_df.empty:
-        target = st.selectbox("Select Patient to Discharge / Edit", ["Select..."] + active_df['PIN'].tolist())
-        
+        target = st.selectbox("Select Patient to Discharge", ["Select..."] + active_df['PIN'].tolist())
         if target != "Select...":
-            row = active_df[active_df['PIN'] == target].iloc[0]
-            st.info(f"Selected: **{target}** in **{row['Department']}** ({row['Bed']})")
-            
             c_dis1, c_dis2 = st.columns(2)
-            act_d = c_dis1.date_input("Actual Discharge Date", datetime.now())
-            act_t = c_dis2.time_input("Actual Discharge Time", datetime.now().time())
+            act_d = c_dis1.date_input("Discharge Date", datetime.now())
+            act_t = c_dis2.time_input("Discharge Time", datetime.now().time())
             
-            if st.button(f"Confirm Discharge for {target}"):
+            if st.button("Confirm Discharge"):
                 idx = df[(df['PIN'] == target) & (df['Actual_Discharge'].isna())].index
                 st.session_state.df.at[idx[0], 'Actual_Discharge'] = datetime.combine(act_d, act_t)
-                st.success("Discharged! Patient removed from active list.")
-                time.sleep(0.5)
+                st.success("Discharged.")
                 st.rerun()
         
         st.dataframe(active_df[['PIN', 'Department', 'Bed', 'Admit_Date', 'Exp_Discharge']], use_container_width=True)
     else:
-        st.info("No active patients found.")
+        st.info("No active patients.")
 
 # ---------------------------------------------------------
-# 6. Operational Analytics
+# 6. Analytics
 # ---------------------------------------------------------
 elif menu == "Operational Analytics":
     st.title("Performance Analytics")
-    
     calc = df.copy()
-    now = datetime.now()
     
-    # Top Row: Visual Summary
     c1, c2 = st.columns([1, 2])
-    
     with c1:
-        st.markdown("##### 📊 Active Occupancy")
+        st.markdown("##### Active Occupancy")
         active_mask = calc['Actual_Discharge'].isna()
         if not calc[active_mask].empty:
             dept_counts = calc[active_mask]['Department'].value_counts().reset_index()
@@ -363,68 +408,32 @@ elif menu == "Operational Analytics":
             fig = px.pie(dept_counts, values='Count', names='Department', hole=0.6, color_discrete_sequence=px.colors.qualitative.Pastel)
             fig.update_layout(showlegend=False, paper_bgcolor="#0E1117", font={'color': "white"}, margin=dict(t=20, b=20, l=20, r=20))
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No active data.")
             
     with c2:
-        st.markdown("##### 📈 Admissions vs Discharges (Trend)")
+        st.markdown("##### Admissions Trend")
         daily_adm = calc.groupby(calc['Admit_Date'].dt.date).size().reset_index(name='In')
-        
-        dis_data = calc[calc['Actual_Discharge'].notnull()]
-        if not dis_data.empty:
-            daily_dis = dis_data.groupby(dis_data['Actual_Discharge'].dt.date).size().reset_index(name='Out')
-            trend = pd.merge(daily_adm, daily_dis, left_on='Admit_Date', right_on='Actual_Discharge', how='outer').fillna(0)
-            
-            fig2 = go.Figure()
-            fig2.add_trace(go.Bar(x=trend['Admit_Date'], y=trend['In'], name='Admissions', marker_color='#58A6FF'))
-            fig2.add_trace(go.Bar(x=trend['Admit_Date'], y=trend['Out'], name='Discharges', marker_color='#238636'))
-            fig2.update_layout(paper_bgcolor="#0E1117", plot_bgcolor="#0E1117", font={'color': "white"}, barmode='group')
-            st.plotly_chart(fig2, use_container_width=True)
-        else:
-            st.info("No historical discharge data yet.")
-
-    # Detailed Table
-    st.markdown("### Department Performance")
-    
-    metrics = []
-    for dept, info in DEPARTMENTS.items():
-        d_df = calc[calc['Department'] == dept]
-        active_n = len(d_df[d_df['Actual_Discharge'].isna()])
-        total_n = len(d_df)
-        
-        discharged = d_df[d_df['Actual_Discharge'].notnull()].copy()
-        if not discharged.empty:
-            alos = (discharged['Actual_Discharge'] - discharged['Admit_Date']).dt.total_seconds().mean() / 86400
-        else:
-            alos = 0
-            
-        metrics.append({
-            "Department": dept,
-            "Capacity": info['cap'],
-            "Current Occupancy": active_n,
-            "Total Admissions": total_n,
-            "Avg LOS (Days)": round(alos, 1)
-        })
-    
-    st.dataframe(pd.DataFrame(metrics), use_container_width=True)
+        fig2 = go.Figure()
+        fig2.add_trace(go.Bar(x=daily_adm['Admit_Date'], y=daily_adm['In'], name='Admissions', marker_color='#58A6FF'))
+        fig2.update_layout(paper_bgcolor="#0E1117", plot_bgcolor="#0E1117", font={'color': "white"})
+        st.plotly_chart(fig2, use_container_width=True)
 
 # ---------------------------------------------------------
 # 7. Settings
 # ---------------------------------------------------------
 elif menu == "Settings":
     st.title("System Settings")
-    
-    c1, c2 = st.columns(2)
-    with c1:
-        st.warning("⚠️ **Factory Reset:** Deletes ALL data. Use to clean 'Ghost Data'.")
-        if st.button("FACTORY RESET (Clean Database)", type="primary"):
-            del st.session_state.df
-            st.success("System Cleared. You can now start fresh.")
-            time.sleep(1)
-            st.rerun()
-    
-    with c2:
-        st.info("🛠 **Generate Simulation:** Creates safe random data (40-70% capacity).")
-        if st.button("Generate Safe Test Data"):
-            del st.session_state.df
-            st.rerun()
+    if st.button("FACTORY RESET (Clean Database)", type="primary"):
+        del st.session_state.df
+        st.success("System Cleared.")
+        st.rerun()
+
+# ---------------------------------------------------------
+# 8. SIMULATION LOOP (THE MAGIC)
+# ---------------------------------------------------------
+if sim_mode:
+    # Run a simulation step
+    run_simulation_step()
+    # Wait 7 seconds
+    time.sleep(7)
+    # Rerun the app to update UI
+    st.rerun()
