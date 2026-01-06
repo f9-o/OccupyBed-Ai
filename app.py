@@ -24,7 +24,8 @@ st.markdown("""
         padding: 20px; text-align: center; height: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
     .kpi-label { font-size: 11px; color: #8B949E; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
-    .kpi-val { font-size: 32px; font-weight: 700; color: #FFF; margin: 0; }
+    .kpi-val { font-size: 28px; font-weight: 700; color: #FFF; margin: 0; }
+    .kpi-sub { font-size: 11px; color: #58A6FF; margin-top: 5px;}
     
     /* AI Board */
     .ai-container {
@@ -125,12 +126,12 @@ with st.sidebar:
             st.warning("Not found or Discharged")
 
     st.markdown("---")
-    menu = st.radio("NAVIGATION", ["Overview", "Live Admissions", "KPIs & Analytics", "Settings"], label_visibility="collapsed")
+    menu = st.radio("NAVIGATION", ["Overview", "Live Admissions", "Operational Analytics", "Settings"], label_visibility="collapsed")
     st.markdown("---")
     st.caption("System Status: Online")
 
 # ---------------------------------------------------------
-# 4. OVERVIEW (Fixed Layout: Cards -> Gauge/AI -> Depts)
+# 4. OVERVIEW (Fixed Layout)
 # ---------------------------------------------------------
 if menu == "Overview":
     c1, c2 = st.columns([3, 1])
@@ -233,12 +234,12 @@ if menu == "Overview":
             """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 5. Live Admissions (Fixed: Data Mgmt, Logic, Discharge)
+# 5. Live Admissions
 # ---------------------------------------------------------
 elif menu == "Live Admissions":
     st.title("Patient Admission & Discharge Center")
     
-    # 1. Data Management (Moved Here)
+    # Data Management
     with st.expander("📂 Data Operations (Import / Export)", expanded=False):
         c_dl, c_ul = st.columns(2)
         with c_dl:
@@ -255,73 +256,66 @@ elif menu == "Live Admissions":
                     st.rerun()
                 except: st.error("Invalid File")
 
-    # 2. Admission Form (Strict Logic)
-    with st.expander("➕ Admit New Patient", expanded=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            pin = st.selectbox("Select Patient PIN", ["Select..."] + list(PATIENT_DB.keys()))
-            # Auto-detect Gender
-            gender = PATIENT_DB.get(pin, "Unknown") if pin != "Select..." else "Unknown"
-            if pin != "Select...": st.info(f"System Identified: **{gender}**")
-            
-            dept = st.selectbox("Assign Department", ["Select..."] + list(DEPARTMENTS.keys()))
-            
-            # Bed Logic (Empty only)
-            bed_opts = ["Select Dept"]
-            if dept != "Select...":
-                occ_beds = df[(df['Department'] == dept) & (df['Actual_Discharge'].isna())]['Bed'].tolist()
-                all_beds = [f"{dept[:3].upper()}-{i+1:03d}" for i in range(DEPARTMENTS[dept]['cap'])]
-                free_beds = [b for b in all_beds if b not in occ_beds]
-                bed_opts = free_beds if free_beds else ["NO BEDS AVAILABLE"]
-            bed = st.selectbox("Assign Bed", bed_opts)
+    # Admission Form
+    st.subheader("1. New Admission")
+    c1, c2 = st.columns(2)
+    with c1:
+        pin = st.selectbox("Select Patient PIN", ["Select..."] + list(PATIENT_DB.keys()))
+        gender = PATIENT_DB.get(pin, "Unknown") if pin != "Select..." else "Unknown"
+        if pin != "Select...": st.info(f"System Identified: **{gender}**")
+        
+        dept = st.selectbox("Assign Department", ["Select..."] + list(DEPARTMENTS.keys()))
+        
+        bed_opts = ["Select Dept"]
+        if dept != "Select...":
+            occ_beds = df[(df['Department'] == dept) & (df['Actual_Discharge'].isna())]['Bed'].tolist()
+            all_beds = [f"{dept[:3].upper()}-{i+1:03d}" for i in range(DEPARTMENTS[dept]['cap'])]
+            free_beds = [b for b in all_beds if b not in occ_beds]
+            bed_opts = free_beds if free_beds else ["NO BEDS AVAILABLE"]
+        bed = st.selectbox("Assign Bed", bed_opts)
 
-        with c2:
-            st.markdown("###### Timing")
-            d1, t1 = st.columns(2)
-            adm_d = d1.date_input("Admit Date", datetime.now())
-            adm_t = t1.time_input("Admit Time", datetime.now().time())
-            
-            st.markdown("###### Discharge Plan")
-            d2, t2 = st.columns(2)
-            exp_d = d2.date_input("Exp Date", datetime.now() + timedelta(days=3))
-            exp_t = t2.time_input("Exp Time", datetime.now().time())
-            
-            src = st.selectbox("Source", ["Emergency", "Elective", "Transfer"])
+    with c2:
+        d1, t1 = st.columns(2)
+        adm_d = d1.date_input("Date", datetime.now())
+        adm_t = t1.time_input("Time", datetime.now().time())
+        d2, t2 = st.columns(2)
+        exp_d = d2.date_input("Exp Date", datetime.now() + timedelta(days=3))
+        exp_t = t2.time_input("Exp Time", datetime.now().time())
+        src = st.selectbox("Source", ["Emergency", "Elective", "Transfer"])
 
-        if st.button("Confirm Admission", type="primary"):
-            # Validation: Check Duplicate PIN in Active List
-            is_admitted = not df[(df['PIN'] == pin) & (df['Actual_Discharge'].isna())].empty
-            
-            if pin == "Select..." or dept == "Select..." or bed in ["Select Dept", "NO BEDS AVAILABLE"]:
-                st.warning("Please complete all fields.")
-            elif is_admitted:
-                st.error(f"Error: Patient {pin} is ALREADY admitted. Please discharge them first.")
-            elif DEPARTMENTS[dept]['gen'] != "Mixed" and DEPARTMENTS[dept]['gen'] != gender:
-                st.error(f"Error: Gender Mismatch. {dept} is for {DEPARTMENTS[dept]['gen']} only.")
-            else:
-                new_rec = {
-                    "PIN": pin, "Gender": gender, "Department": dept, "Bed": bed,
-                    "Admit_Date": datetime.combine(adm_d, adm_t),
-                    "Exp_Discharge": datetime.combine(exp_d, exp_t),
-                    "Actual_Discharge": pd.NaT,
-                    "Source": src
-                }
-                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new_rec])], ignore_index=True)
-                st.success("Admitted Successfully.")
-                time.sleep(0.5)
-                st.rerun()
+    if st.button("Confirm Admission", type="primary"):
+        # Validation
+        is_admitted = not df[(df['PIN'] == pin) & (df['Actual_Discharge'].isna())].empty
+        
+        if pin == "Select..." or dept == "Select..." or bed in ["Select Dept", "NO BEDS AVAILABLE"]:
+            st.warning("Please complete all fields.")
+        elif is_admitted:
+            st.error(f"Error: Patient {pin} is ALREADY admitted. Please discharge them first.")
+        elif DEPARTMENTS[dept]['gen'] != "Mixed" and DEPARTMENTS[dept]['gen'] != gender:
+            st.error(f"Error: Gender Mismatch. {dept} is for {DEPARTMENTS[dept]['gen']} only.")
+        else:
+            new_rec = {
+                "PIN": pin, "Gender": gender, "Department": dept, "Bed": bed,
+                "Admit_Date": datetime.combine(adm_d, adm_t),
+                "Exp_Discharge": datetime.combine(exp_d, exp_t),
+                "Actual_Discharge": pd.NaT,
+                "Source": src
+            }
+            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new_rec])], ignore_index=True)
+            st.success("Admitted Successfully.")
+            time.sleep(0.5)
+            st.rerun()
 
     st.markdown("---")
 
-    # 3. Patient Management (Update & Discharge)
-    st.subheader("Patient Management (Update / Discharge)")
+    # Patient Management (Update & Discharge)
+    st.subheader("2. Patient Management (Update / Discharge)")
     active_df = df[df['Actual_Discharge'].isna()].sort_values(by="Admit_Date", ascending=False)
     
     if not active_df.empty:
         target = st.selectbox("Select Patient to Manage", ["Select..."] + active_df['PIN'].tolist())
         
         if target != "Select...":
-            # Get Patient Data
             p_idx = df[(df['PIN'] == target) & (df['Actual_Discharge'].isna())].index[0]
             p_row = df.loc[p_idx]
             
@@ -329,7 +323,6 @@ elif menu == "Live Admissions":
             
             tab_up, tab_dis = st.tabs(["✏️ Update Expected Discharge", "📤 Discharge Patient"])
             
-            # Update Tab
             with tab_up:
                 c_up1, c_up2 = st.columns(2)
                 new_exp_d = c_up1.date_input("New Exp Date", p_row['Exp_Discharge'])
@@ -339,7 +332,6 @@ elif menu == "Live Admissions":
                     st.success("Record Updated.")
                     st.rerun()
             
-            # Discharge Tab
             with tab_dis:
                 c_d1, c_d2 = st.columns(2)
                 act_d = c_d1.date_input("Actual Discharge Date", datetime.now())
@@ -355,19 +347,69 @@ elif menu == "Live Admissions":
         st.info("No active patients.")
 
 # ---------------------------------------------------------
-# 6. KPIs & Analytics (Restored Visuals)
+# 6. Operational Analytics (ENHANCED with new KPIs)
 # ---------------------------------------------------------
-elif menu == "KPIs & Analytics":
-    st.title("Operational Analytics")
+elif menu == "Operational Analytics":
+    st.title("Performance Analytics")
     calc = df.copy()
     
-    # 1. Hospital Level
-    st.subheader("🏥 Hospital-Wide Analytics")
-    c1, c2 = st.columns([1, 2])
+    # --- 1. CALCULATE REQUIRED KPIS ---
     
+    # A. Time Range (Days difference)
+    if not calc.empty:
+        min_date = calc['Admit_Date'].min()
+        max_date = datetime.now()
+        days_range = (max_date - min_date).days
+        if days_range < 1: days_range = 1
+    else:
+        days_range = 1
+        
+    # B. Counts
+    total_adm = len(calc)
+    total_dis = len(calc[calc['Actual_Discharge'].notnull()])
+    total_cap = sum(d['cap'] for d in DEPARTMENTS.values())
+    
+    # C. Rates
+    adm_rate = total_adm / days_range # Avg per day
+    dis_rate = total_dis / days_range # Avg per day
+    bed_turnover_rate = total_dis / total_cap # Rounds per bed
+    
+    # D. Bed Turnover Interval (BTI) = (Available Bed Days) / Discharges
+    # Estimate Available Bed Days = (Total Cap * Days) - Total Patient Days
+    calc['Discharge_Calc'] = calc['Actual_Discharge'].fillna(datetime.now())
+    calc['Patient_Days'] = (calc['Discharge_Calc'] - calc['Admit_Date']).dt.total_seconds() / 86400
+    total_patient_days = calc['Patient_Days'].sum()
+    
+    available_bed_days = (total_cap * days_range) - total_patient_days
+    bti = available_bed_days / total_dis if total_dis > 0 else 0
+    
+    # E. Ready % (Active patients ready to leave / Total Active)
+    active = calc[calc['Actual_Discharge'].isna()]
+    if not active.empty:
+        ready_pats = active[active['Exp_Discharge'] <= datetime.now() + timedelta(hours=4)] # Ready now or soon
+        ready_pct = (len(ready_pats) / len(active)) * 100
+    else:
+        ready_pct = 0
+
+    # --- 2. DISPLAY KPIs (Top Row) ---
+    st.subheader("🚀 Operational KPIs")
+    k1, k2, k3, k4, k5 = st.columns(5)
+    
+    def kpi_box(lbl, val, sub):
+        return f"""<div class="kpi-card"><div class="kpi-label">{lbl}</div><div class="kpi-val" style="font-size:24px;">{val}</div><div class="kpi-sub">{sub}</div></div>"""
+        
+    k1.markdown(kpi_box("Admission Rate", f"{adm_rate:.1f}", "Patients / Day"), unsafe_allow_html=True)
+    k2.markdown(kpi_box("Discharge Rate", f"{dis_rate:.1f}", "Patients / Day"), unsafe_allow_html=True)
+    k3.markdown(kpi_box("Turnover Rate", f"{bed_turnover_rate:.2f}", "Rounds / Bed"), unsafe_allow_html=True)
+    k4.markdown(kpi_box("Empty Interval", f"{bti:.1f}", "Days / Bed"), unsafe_allow_html=True)
+    k5.markdown(kpi_box("Ready for Discharge", f"{ready_pct:.1f}%", "Of Active Pts"), unsafe_allow_html=True)
+
+    st.markdown("---")
+    
+    # --- 3. Visuals ---
+    c1, c2 = st.columns([1, 2])
     with c1:
         st.markdown("**Active Occupancy Breakdown**")
-        active = calc[calc['Actual_Discharge'].isna()]
         if not active.empty:
             fig = px.pie(active, names='Department', hole=0.6, color_discrete_sequence=px.colors.qualitative.Pastel)
             fig.update_layout(paper_bgcolor="#0E1117", font={'color': "white"}, margin=dict(t=0,b=0,l=0,r=0), showlegend=False)
@@ -391,14 +433,14 @@ elif menu == "KPIs & Analytics":
 
     st.markdown("---")
 
-    # 2. Department Level (Detailed Table)
+    # --- 4. Detailed Department Table ---
     st.subheader("🏢 Department Level KPIs")
     
     dept_stats = []
     for dept, info in DEPARTMENTS.items():
         d_df = calc[calc['Department'] == dept]
         curr_occ = len(d_df[d_df['Actual_Discharge'].isna()])
-        total_adm = len(d_df)
+        total_n = len(d_df)
         
         # ALOS
         discharged = d_df[d_df['Actual_Discharge'].notnull()].copy()
@@ -411,7 +453,7 @@ elif menu == "KPIs & Analytics":
             "Capacity": info['cap'],
             "Occupied": curr_occ,
             "Utilization": f"{(curr_occ/info['cap'])*100:.1f}%",
-            "Total Admissions": total_adm,
+            "Total Admissions": total_n,
             "Avg LOS (Days)": round(alos, 1)
         })
     
