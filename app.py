@@ -18,7 +18,7 @@ st.markdown("""
     .stApp { background-color: #0E1117; color: #E6EDF3; font-family: 'Segoe UI', sans-serif; }
     [data-testid="stSidebar"] { background-color: #010409; border-right: 1px solid #30363D; }
     
-    /* KPI Cards (Top Row) */
+    /* KPI Cards */
     .kpi-card {
         background-color: #161B22; border: 1px solid #30363D; border-radius: 6px;
         padding: 20px; text-align: center; height: 100%;
@@ -76,8 +76,35 @@ def init_system():
             "PIN", "Gender", "Department", "Bed", 
             "Admit_Date", "Exp_Discharge", "Actual_Discharge", "Source"
         ])
-        # START EMPTY or Minimal to avoid "Ghost Data" confusion
-        # User can populate via CSV or manual entry
+        
+        # --- GENERATE SAFE SIMULATION DATA ---
+        data = []
+        for dept, info in DEPARTMENTS.items():
+            # Safety Logic: Occupancy between 40% and 70% (Never Full)
+            safe_count = int(info['cap'] * np.random.uniform(0.4, 0.7))
+            
+            for i in range(safe_count):
+                bed_n = f"{dept[:3].upper()}-{i+1:03d}"
+                # Random Dates
+                adm = datetime.now() - timedelta(days=np.random.randint(0, 5), hours=np.random.randint(1, 10))
+                # Mixed: Some ready to go, some staying
+                if np.random.random() < 0.3:
+                    exp = datetime.now() + timedelta(hours=np.random.randint(2, 24))
+                else:
+                    exp = adm + timedelta(days=np.random.randint(3, 8))
+                
+                data.append({
+                    "PIN": f"PIN-{np.random.randint(2000, 9999)}",
+                    "Gender": "Female" if "Female" in dept else ("Male" if "Male" in dept else np.random.choice(["Male", "Female"])),
+                    "Department": dept,
+                    "Bed": bed_n,
+                    "Admit_Date": adm,
+                    "Exp_Discharge": exp,
+                    "Actual_Discharge": pd.NaT, # Active
+                    "Source": np.random.choice(["Emergency", "Elective", "Transfer"])
+                })
+        
+        st.session_state.df = pd.DataFrame(data)
 
 init_system()
 df = st.session_state.df
@@ -130,7 +157,7 @@ if menu == "Overview":
     g_col, ai_col = st.columns([1, 2])
     
     with g_col:
-        # Hospital Pressure Gauge (The requested semi-circle)
+        # Hospital Pressure Gauge
         occ_rate = (occ_count / total_cap) * 100 if total_cap > 0 else 0
         fig = go.Figure(go.Indicator(
             mode = "gauge+number", value = occ_rate,
@@ -157,7 +184,7 @@ if menu == "Overview":
             if pct >= 85:
                 st.markdown(f"""<div class="ai-item"><span style="color:#F85149"><b>{dept}:</b></span> Critical load ({int(pct)}%). Redirect new admissions to {info['overflow']}.</div>""", unsafe_allow_html=True)
                 ai_triggered = True
-            elif pct >= 70: # YELLOW WARNING ADDED
+            elif pct >= 70: # YELLOW WARNING
                 st.markdown(f"""<div class="ai-item"><span style="color:#D29922"><b>{dept}:</b></span> High Load ({int(pct)}%). Prepare discharge lounge.</div>""", unsafe_allow_html=True)
                 ai_triggered = True
                 
@@ -207,12 +234,12 @@ if menu == "Overview":
             """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 5. Live Admissions (Data Management Moved Here)
+# 5. Live Admissions
 # ---------------------------------------------------------
 elif menu == "Live Admissions":
     st.title("Patient Admission & Discharge Center")
     
-    # --- Part 0: Data Management (Moved Here) ---
+    # --- Part 0: Data Management ---
     with st.expander("📂 Data Operations (Import / Export)", expanded=False):
         c_dl, c_ul = st.columns(2)
         with c_dl:
@@ -229,7 +256,7 @@ elif menu == "Live Admissions":
                     st.rerun()
                 except: st.error("Invalid File")
 
-    # --- Part A: Admission Form (Prevent Duplicates) ---
+    # --- Part A: Admission Form ---
     st.subheader("1. New Admission")
     c1, c2 = st.columns(2)
     with c1:
@@ -289,7 +316,7 @@ elif menu == "Live Admissions":
 
     st.markdown("---")
 
-    # --- Part B: Discharge Management (Correct Logic) ---
+    # --- Part B: Discharge Management ---
     st.subheader("2. Current Inpatients & Discharge")
     active_df = df[df['Actual_Discharge'].isna()].sort_values(by="Admit_Date", ascending=False)
     
@@ -316,7 +343,7 @@ elif menu == "Live Admissions":
         st.info("No active patients found.")
 
 # ---------------------------------------------------------
-# 6. Operational Analytics (Visual Dashboard)
+# 6. Operational Analytics
 # ---------------------------------------------------------
 elif menu == "Operational Analytics":
     st.title("Performance Analytics")
@@ -324,14 +351,12 @@ elif menu == "Operational Analytics":
     calc = df.copy()
     now = datetime.now()
     
-    # Prepare Data
-    active_mask = calc['Actual_Discharge'].isna()
-    
-    # --- Top Row: Visual Summary ---
+    # Top Row: Visual Summary
     c1, c2 = st.columns([1, 2])
     
     with c1:
         st.markdown("##### 📊 Active Occupancy")
+        active_mask = calc['Actual_Discharge'].isna()
         if not calc[active_mask].empty:
             dept_counts = calc[active_mask]['Department'].value_counts().reset_index()
             dept_counts.columns = ['Department', 'Count']
@@ -358,17 +383,15 @@ elif menu == "Operational Analytics":
         else:
             st.info("No historical discharge data yet.")
 
-    # --- Detailed Table ---
+    # Detailed Table
     st.markdown("### Department Performance")
     
-    # Calculate Metrics per Dept
     metrics = []
     for dept, info in DEPARTMENTS.items():
         d_df = calc[calc['Department'] == dept]
         active_n = len(d_df[d_df['Actual_Discharge'].isna()])
         total_n = len(d_df)
         
-        # ALOS calculation
         discharged = d_df[d_df['Actual_Discharge'].notnull()].copy()
         if not discharged.empty:
             alos = (discharged['Actual_Discharge'] - discharged['Admit_Date']).dt.total_seconds().mean() / 86400
@@ -390,10 +413,18 @@ elif menu == "Operational Analytics":
 # ---------------------------------------------------------
 elif menu == "Settings":
     st.title("System Settings")
-    st.warning("⚠️ **Factory Reset:** Use this to clear 'Ghost Data' and start with a clean database.")
     
-    if st.button("FACTORY RESET (Clean Database)", type="primary"):
-        del st.session_state.df
-        st.success("System Cleared. You can now start fresh.")
-        time.sleep(1)
-        st.rerun()
+    c1, c2 = st.columns(2)
+    with c1:
+        st.warning("⚠️ **Factory Reset:** Deletes ALL data. Use to clean 'Ghost Data'.")
+        if st.button("FACTORY RESET (Clean Database)", type="primary"):
+            del st.session_state.df
+            st.success("System Cleared. You can now start fresh.")
+            time.sleep(1)
+            st.rerun()
+    
+    with c2:
+        st.info("🛠 **Generate Simulation:** Creates safe random data (40-70% capacity).")
+        if st.button("Generate Safe Test Data"):
+            del st.session_state.df
+            st.rerun()
