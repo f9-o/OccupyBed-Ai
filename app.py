@@ -8,9 +8,9 @@ import time
 import os
 
 # ---------------------------------------------------------
-# 1. System Config & Design (Dark Corporate)
+# 1. System Config & Design (OccupyBed AI MVP)
 # ---------------------------------------------------------
-st.set_page_config(page_title="OccupyBed AI | Enterprise", layout="wide", page_icon="🏥")
+st.set_page_config(page_title="OccupyBed AI MVP", layout="wide", page_icon="🏥")
 
 st.markdown("""
 <style>
@@ -18,10 +18,33 @@ st.markdown("""
     .stApp { background-color: #0E1117; color: #E6EDF3; font-family: 'Segoe UI', sans-serif; }
     [data-testid="stSidebar"] { background-color: #010409; border-right: 1px solid #30363D; }
     
+    /* --- GLOWING LOGO --- */
+    @keyframes glow {
+        from { text-shadow: 0 0 5px #fff, 0 0 10px #58A6FF; }
+        to { text-shadow: 0 0 10px #fff, 0 0 20px #58A6FF; }
+    }
+    .logo-box { text-align: center; margin-bottom: 30px; margin-top: 10px; }
+    .logo-main { 
+        font-size: 28px; 
+        font-weight: 800; 
+        color: #FFFFFF; 
+        animation: glow 2s infinite alternate; 
+        margin: 0; 
+        letter-spacing: 1px;
+    }
+    .logo-slogan { 
+        font-size: 10px; 
+        color: #8B949E; 
+        text-transform: uppercase; 
+        letter-spacing: 2px; 
+        margin-top: 5px; 
+        font-weight: 500;
+    }
+
     /* KPI Cards */
     .kpi-card {
         background-color: #161B22; border: 1px solid #30363D; border-radius: 6px;
-        padding: 20px; text-align: center; height: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        padding: 20px; text-align: center; height: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .kpi-label { font-size: 11px; color: #8B949E; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
     .kpi-val { font-size: 28px; font-weight: 700; color: #FFF; margin: 0; }
@@ -78,7 +101,7 @@ def init_system():
             "Admit_Date", "Exp_Discharge", "Actual_Discharge", "Source"
         ])
         
-        # --- Clean Initial Data (Max 60% Capacity) ---
+        # --- Clean Initial Data ---
         data = []
         for dept, info in DEPARTMENTS.items():
             count = int(info['cap'] * np.random.uniform(0.4, 0.6))
@@ -110,8 +133,16 @@ for col in ['Admit_Date', 'Exp_Discharge', 'Actual_Discharge']:
 # 3. Sidebar (Search & Nav)
 # ---------------------------------------------------------
 with st.sidebar:
-    if os.path.exists("logo.png"): st.image("logo.png", use_container_width=True)
-    else: st.header("OccupyBed AI")
+    # --- GLOWING LOGO SECTION ---
+    if os.path.exists("logo.png"):
+        st.image("logo.png", use_container_width=True)
+    else:
+        st.markdown("""
+        <div class="logo-box">
+            <div class="logo-main">OccupyBed AI</div>
+            <div class="logo-slogan">intelligent hospital bed management</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Patient Search
     st.markdown("### 🔍 Patient Search")
@@ -131,7 +162,7 @@ with st.sidebar:
     st.caption("System Status: Online")
 
 # ---------------------------------------------------------
-# 4. OVERVIEW (Fixed Layout)
+# 4. OVERVIEW
 # ---------------------------------------------------------
 if menu == "Overview":
     c1, c2 = st.columns([3, 1])
@@ -239,7 +270,7 @@ if menu == "Overview":
 elif menu == "Live Admissions":
     st.title("Patient Admission & Discharge Center")
     
-    # Data Management
+    # 1. Data Management
     with st.expander("📂 Data Operations (Import / Export)", expanded=False):
         c_dl, c_ul = st.columns(2)
         with c_dl:
@@ -256,7 +287,7 @@ elif menu == "Live Admissions":
                     st.rerun()
                 except: st.error("Invalid File")
 
-    # Admission Form
+    # 2. Admission Form
     st.subheader("1. New Admission")
     c1, c2 = st.columns(2)
     with c1:
@@ -284,7 +315,6 @@ elif menu == "Live Admissions":
         src = st.selectbox("Source", ["Emergency", "Elective", "Transfer"])
 
     if st.button("Confirm Admission", type="primary"):
-        # Validation
         is_admitted = not df[(df['PIN'] == pin) & (df['Actual_Discharge'].isna())].empty
         
         if pin == "Select..." or dept == "Select..." or bed in ["Select Dept", "NO BEDS AVAILABLE"]:
@@ -308,7 +338,7 @@ elif menu == "Live Admissions":
 
     st.markdown("---")
 
-    # Patient Management (Update & Discharge)
+    # 3. Patient Management
     st.subheader("2. Patient Management (Update / Discharge)")
     active_df = df[df['Actual_Discharge'].isna()].sort_values(by="Admit_Date", ascending=False)
     
@@ -347,10 +377,10 @@ elif menu == "Live Admissions":
         st.info("No active patients.")
 
 # ---------------------------------------------------------
-# 6. Operational Analytics (TABLE VIEW for Occupancy)
+# 6. Operational Analytics (FINAL REQUESTED LAYOUT)
 # ---------------------------------------------------------
 elif menu == "Operational Analytics":
-    st.title("Performance Analytics")
+    st.title("Operational Analytics")
     calc = df.copy()
     
     # --- 1. CALCULATE KPIs ---
@@ -383,8 +413,8 @@ elif menu == "Operational Analytics":
     else:
         ready_pct = 0
 
-    # --- 2. DISPLAY KPIs ---
-    st.subheader("🚀 Operational KPIs")
+    # --- 2. DISPLAY KPIs (Operational KPIs) ---
+    st.subheader("Operational KPIs")
     k1, k2, k3, k4, k5 = st.columns(5)
     def kpi_box(lbl, val, sub):
         return f"""<div class="kpi-card"><div class="kpi-label">{lbl}</div><div class="kpi-val" style="font-size:24px;">{val}</div><div class="kpi-sub">{sub}</div></div>"""
@@ -397,72 +427,30 @@ elif menu == "Operational Analytics":
 
     st.markdown("---")
     
-    # --- 3. Occupancy Table & Trend Chart ---
-    c1, c2 = st.columns([1, 2])
+    # --- 3. TREND CHART (Area Chart) ---
+    # Replaced Summary Table with this prominent chart
+    st.subheader("Admissions & Discharges Trend")
+    daily_adm = calc.groupby(calc['Admit_Date'].dt.date).size().reset_index(name='Admissions')
+    dis_data = calc[calc['Actual_Discharge'].notnull()]
     
-    with c1:
-        st.markdown("##### 📋 Live Occupancy Status")
-        # Build Summary Table
-        occ_summary = []
-        for d, info in DEPARTMENTS.items():
-            d_act = active[active['Department'] == d]
-            occ = len(d_act)
-            cap = info['cap']
-            pct = (occ/cap)
-            
-            # Status Label
-            if pct < 0.7: status = "Safe"
-            elif pct < 0.85: status = "Warning"
-            else: status = "Critical"
-            
-            occ_summary.append({
-                "Department": d,
-                "Occupied": f"{occ}/{cap}",
-                "Load": pct, # Numeric for progress bar
-                "Status": status
-            })
-            
-        occ_df = pd.DataFrame(occ_summary).sort_values("Load", ascending=False)
+    if not dis_data.empty:
+        daily_dis = dis_data.groupby(dis_data['Actual_Discharge'].dt.date).size().reset_index(name='Discharges')
+        trend = pd.merge(daily_adm, daily_dis, left_on='Admit_Date', right_on='Actual_Discharge', how='outer').fillna(0)
         
-        st.dataframe(
-            occ_df,
-            column_config={
-                "Load": st.column_config.ProgressColumn(
-                    "Occupancy %",
-                    help="Current Load",
-                    format="%.1f%%",
-                    min_value=0,
-                    max_value=1,
-                ),
-                "Status": st.column_config.TextColumn(
-                    "Status",
-                    validate="^(Safe|Warning|Critical)$"
-                )
-            },
-            hide_index=True,
-            use_container_width=True
-        )
-            
-    with c2:
-        st.markdown("##### 📈 Admissions vs Discharges (Trend)")
-        daily_adm = calc.groupby(calc['Admit_Date'].dt.date).size().reset_index(name='Admissions')
-        dis_data = calc[calc['Actual_Discharge'].notnull()]
-        if not dis_data.empty:
-            daily_dis = dis_data.groupby(dis_data['Actual_Discharge'].dt.date).size().reset_index(name='Discharges')
-            trend = pd.merge(daily_adm, daily_dis, left_on='Admit_Date', right_on='Actual_Discharge', how='outer').fillna(0)
-            
-            fig2 = go.Figure()
-            fig2.add_trace(go.Bar(x=trend['Admit_Date'], y=trend['Admissions'], name='Admissions', marker_color='#58A6FF'))
-            fig2.add_trace(go.Bar(x=trend['Admit_Date'], y=trend['Discharges'], name='Discharges', marker_color='#238636'))
-            fig2.update_layout(paper_bgcolor="#0E1117", plot_bgcolor="#0E1117", font={'color': "white"}, barmode='group')
-            st.plotly_chart(fig2, use_container_width=True)
-        else:
-            st.info("Not enough discharge data for trend.")
+        # Area Chart
+        fig_trend = px.area(trend, x='Admit_Date', y=['Admissions', 'Discharges'], 
+                            color_discrete_map={'Admissions': '#58A6FF', 'Discharges': '#238636'})
+        fig_trend.update_layout(paper_bgcolor="#0E1117", plot_bgcolor="#0E1117", font={'color': "white"}, 
+                                margin=dict(l=0, r=0, t=10, b=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        st.plotly_chart(fig_trend, use_container_width=True)
+    else:
+        st.info("Insufficient discharge data to generate trends.")
 
     st.markdown("---")
 
-    # --- 4. Detailed Department Table ---
-    st.subheader("🏢 Department Detailed Performance")
+    # --- 4. Detailed Performance Table ---
+    # This replaces the small occupancy table
+    st.subheader("Hospital Details Performance")
     
     dept_stats = []
     for dept, info in DEPARTMENTS.items():
@@ -479,12 +467,27 @@ elif menu == "Operational Analytics":
             "Department": dept,
             "Capacity": info['cap'],
             "Occupied": curr_occ,
-            "Utilization": f"{(curr_occ/info['cap'])*100:.1f}%",
+            "Utilization": curr_occ / info['cap'], # Value for progress bar
             "Total Admissions": total_n,
             "Avg LOS (Days)": round(alos, 1)
         })
     
-    st.dataframe(pd.DataFrame(dept_stats), use_container_width=True)
+    perf_df = pd.DataFrame(dept_stats)
+    
+    st.dataframe(
+        perf_df,
+        column_config={
+            "Utilization": st.column_config.ProgressColumn(
+                "Utilization %",
+                help="Current bed occupancy percentage",
+                format="%.1f%%",
+                min_value=0,
+                max_value=1,
+            ),
+        },
+        use_container_width=True,
+        hide_index=True
+    )
 
 # ---------------------------------------------------------
 # 7. Settings
