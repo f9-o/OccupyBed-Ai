@@ -18,7 +18,7 @@ st.markdown("""
     .stApp { background-color: #0E1117; color: #E6EDF3; font-family: 'Segoe UI', sans-serif; }
     [data-testid="stSidebar"] { background-color: #010409; border-right: 1px solid #30363D; }
     
-    /* KPI Cards (Overview) */
+    /* KPI Cards */
     .kpi-card {
         background-color: #161B22; border: 1px solid #30363D; border-radius: 6px;
         padding: 20px; text-align: center; height: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
@@ -347,15 +347,13 @@ elif menu == "Live Admissions":
         st.info("No active patients.")
 
 # ---------------------------------------------------------
-# 6. Operational Analytics (ENHANCED with new KPIs)
+# 6. Operational Analytics (TABLE VIEW for Occupancy)
 # ---------------------------------------------------------
 elif menu == "Operational Analytics":
     st.title("Performance Analytics")
     calc = df.copy()
     
-    # --- 1. CALCULATE REQUIRED KPIS ---
-    
-    # A. Time Range (Days difference)
+    # --- 1. CALCULATE KPIs ---
     if not calc.empty:
         min_date = calc['Admit_Date'].min()
         max_date = datetime.now()
@@ -364,37 +362,30 @@ elif menu == "Operational Analytics":
     else:
         days_range = 1
         
-    # B. Counts
     total_adm = len(calc)
     total_dis = len(calc[calc['Actual_Discharge'].notnull()])
     total_cap = sum(d['cap'] for d in DEPARTMENTS.values())
     
-    # C. Rates
-    adm_rate = total_adm / days_range # Avg per day
-    dis_rate = total_dis / days_range # Avg per day
-    bed_turnover_rate = total_dis / total_cap # Rounds per bed
+    adm_rate = total_adm / days_range 
+    dis_rate = total_dis / days_range
+    bed_turnover_rate = total_dis / total_cap
     
-    # D. Bed Turnover Interval (BTI) = (Available Bed Days) / Discharges
-    # Estimate Available Bed Days = (Total Cap * Days) - Total Patient Days
     calc['Discharge_Calc'] = calc['Actual_Discharge'].fillna(datetime.now())
     calc['Patient_Days'] = (calc['Discharge_Calc'] - calc['Admit_Date']).dt.total_seconds() / 86400
     total_patient_days = calc['Patient_Days'].sum()
-    
     available_bed_days = (total_cap * days_range) - total_patient_days
     bti = available_bed_days / total_dis if total_dis > 0 else 0
     
-    # E. Ready % (Active patients ready to leave / Total Active)
     active = calc[calc['Actual_Discharge'].isna()]
     if not active.empty:
-        ready_pats = active[active['Exp_Discharge'] <= datetime.now() + timedelta(hours=4)] # Ready now or soon
+        ready_pats = active[active['Exp_Discharge'] <= datetime.now() + timedelta(hours=4)]
         ready_pct = (len(ready_pats) / len(active)) * 100
     else:
         ready_pct = 0
 
-    # --- 2. DISPLAY KPIs (Top Row) ---
+    # --- 2. DISPLAY KPIs ---
     st.subheader("🚀 Operational KPIs")
     k1, k2, k3, k4, k5 = st.columns(5)
-    
     def kpi_box(lbl, val, sub):
         return f"""<div class="kpi-card"><div class="kpi-label">{lbl}</div><div class="kpi-val" style="font-size:24px;">{val}</div><div class="kpi-sub">{sub}</div></div>"""
         
@@ -406,17 +397,54 @@ elif menu == "Operational Analytics":
 
     st.markdown("---")
     
-    # --- 3. Visuals ---
+    # --- 3. Occupancy Table & Trend Chart ---
     c1, c2 = st.columns([1, 2])
+    
     with c1:
-        st.markdown("**Active Occupancy Breakdown**")
-        if not active.empty:
-            fig = px.pie(active, names='Department', hole=0.6, color_discrete_sequence=px.colors.qualitative.Pastel)
-            fig.update_layout(paper_bgcolor="#0E1117", font={'color': "white"}, margin=dict(t=0,b=0,l=0,r=0), showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
+        st.markdown("##### 📋 Live Occupancy Status")
+        # Build Summary Table
+        occ_summary = []
+        for d, info in DEPARTMENTS.items():
+            d_act = active[active['Department'] == d]
+            occ = len(d_act)
+            cap = info['cap']
+            pct = (occ/cap)
+            
+            # Status Label
+            if pct < 0.7: status = "Safe"
+            elif pct < 0.85: status = "Warning"
+            else: status = "Critical"
+            
+            occ_summary.append({
+                "Department": d,
+                "Occupied": f"{occ}/{cap}",
+                "Load": pct, # Numeric for progress bar
+                "Status": status
+            })
+            
+        occ_df = pd.DataFrame(occ_summary).sort_values("Load", ascending=False)
+        
+        st.dataframe(
+            occ_df,
+            column_config={
+                "Load": st.column_config.ProgressColumn(
+                    "Occupancy %",
+                    help="Current Load",
+                    format="%.1f%%",
+                    min_value=0,
+                    max_value=1,
+                ),
+                "Status": st.column_config.TextColumn(
+                    "Status",
+                    validate="^(Safe|Warning|Critical)$"
+                )
+            },
+            hide_index=True,
+            use_container_width=True
+        )
             
     with c2:
-        st.markdown("**Admissions vs Discharges (Trend)**")
+        st.markdown("##### 📈 Admissions vs Discharges (Trend)")
         daily_adm = calc.groupby(calc['Admit_Date'].dt.date).size().reset_index(name='Admissions')
         dis_data = calc[calc['Actual_Discharge'].notnull()]
         if not dis_data.empty:
@@ -434,7 +462,7 @@ elif menu == "Operational Analytics":
     st.markdown("---")
 
     # --- 4. Detailed Department Table ---
-    st.subheader("🏢 Department Level KPIs")
+    st.subheader("🏢 Department Detailed Performance")
     
     dept_stats = []
     for dept, info in DEPARTMENTS.items():
@@ -442,7 +470,6 @@ elif menu == "Operational Analytics":
         curr_occ = len(d_df[d_df['Actual_Discharge'].isna()])
         total_n = len(d_df)
         
-        # ALOS
         discharged = d_df[d_df['Actual_Discharge'].notnull()].copy()
         alos = 0
         if not discharged.empty:
