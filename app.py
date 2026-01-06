@@ -114,7 +114,7 @@ with st.sidebar:
     else: st.header("OccupyBed AI")
     
     # Patient Search
-    st.markdown("### 🔍 Patient Search")
+    st.markdown("### Patient Search")
     search_q = st.text_input("Enter PIN", placeholder="e.g. PIN-2005")
     if search_q:
         res = df[(df['PIN'] == search_q) & (df['Actual_Discharge'].isna())]
@@ -321,7 +321,7 @@ elif menu == "Live Admissions":
             
             st.info(f"Managing: **{target}** | Dept: **{p_row['Department']}** | Bed: **{p_row['Bed']}**")
             
-            tab_up, tab_dis = st.tabs(["✏️ Update Expected Discharge", "📤 Discharge Patient"])
+            tab_up, tab_dis = st.tabs(["Update Expected Discharge", "Discharge Patient"])
             
             with tab_up:
                 c_up1, c_up2 = st.columns(2)
@@ -392,7 +392,7 @@ elif menu == "Operational Analytics":
         ready_pct = 0
 
     # --- 2. DISPLAY KPIs (Top Row) ---
-    st.subheader("🚀 Operational KPIs")
+    st.subheader("Operational KPIs")
     k1, k2, k3, k4, k5 = st.columns(5)
     
     def kpi_box(lbl, val, sub):
@@ -434,7 +434,7 @@ elif menu == "Operational Analytics":
     st.markdown("---")
 
     # --- 4. Detailed Department Table ---
-    st.subheader("🏢 Department Level KPIs")
+    st.subheader("Department Level KPIs")
     
     dept_stats = []
     for dept, info in DEPARTMENTS.items():
