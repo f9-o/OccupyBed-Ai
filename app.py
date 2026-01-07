@@ -136,6 +136,12 @@ with st.sidebar:
     # --- GLOWING LOGO SECTION ---
     if os.path.exists("logo.png"):
         st.image("logo.png", use_container_width=True)
+        st.markdown("""
+        <div class="logo-box">
+            <div class="logo-main">OccupyBed AI</div>
+            <div class="logo-slogan">intelligent hospital bed management</div>
+        </div>
+        """, unsafe_allow_html=True)
     else:
         st.markdown("""
         <div class="logo-box">
@@ -271,7 +277,7 @@ elif menu == "Live Admissions":
     st.title("Patient Admission & Discharge Center")
     
     # 1. Data Management
-    with st.expander("📂 Data Operations (Import / Export)", expanded=False):
+    with st.expander("Data Operations (Import / Export)", expanded=False):
         c_dl, c_ul = st.columns(2)
         with c_dl:
             st.download_button("Download Database (CSV)", df.to_csv(index=False).encode('utf-8'), "hospital_db.csv", "text/csv")
@@ -351,7 +357,7 @@ elif menu == "Live Admissions":
             
             st.info(f"Managing: **{target}** | Dept: **{p_row['Department']}** | Bed: **{p_row['Bed']}**")
             
-            tab_up, tab_dis = st.tabs(["✏️ Update Expected Discharge", "📤 Discharge Patient"])
+            tab_up, tab_dis = st.tabs(["Update Expected Discharge", "Discharge Patient"])
             
             with tab_up:
                 c_up1, c_up2 = st.columns(2)
@@ -377,7 +383,7 @@ elif menu == "Live Admissions":
         st.info("No active patients.")
 
 # ---------------------------------------------------------
-# 6. Operational Analytics (FINAL REQUESTED LAYOUT)
+# 6. Operational Analytics
 # ---------------------------------------------------------
 elif menu == "Operational Analytics":
     st.title("Operational Analytics")
@@ -413,7 +419,7 @@ elif menu == "Operational Analytics":
     else:
         ready_pct = 0
 
-    # --- 2. DISPLAY KPIs (Operational KPIs) ---
+    # --- 2. DISPLAY KPIs ---
     st.subheader("Operational KPIs")
     k1, k2, k3, k4, k5 = st.columns(5)
     def kpi_box(lbl, val, sub):
@@ -428,7 +434,6 @@ elif menu == "Operational Analytics":
     st.markdown("---")
     
     # --- 3. TREND CHART (Area Chart) ---
-    # Replaced Summary Table with this prominent chart
     st.subheader("Admissions & Discharges Trend")
     daily_adm = calc.groupby(calc['Admit_Date'].dt.date).size().reset_index(name='Admissions')
     dis_data = calc[calc['Actual_Discharge'].notnull()]
@@ -449,7 +454,6 @@ elif menu == "Operational Analytics":
     st.markdown("---")
 
     # --- 4. Detailed Performance Table ---
-    # This replaces the small occupancy table
     st.subheader("Hospital Details Performance")
     
     dept_stats = []
@@ -494,7 +498,7 @@ elif menu == "Operational Analytics":
 # ---------------------------------------------------------
 elif menu == "Settings":
     st.title("System Settings")
-    st.warning("**Factory Reset:** This will wipe all data. Use it to fix 'Ghost Data' issues.")
+    st.warning("Factory Reset: This will wipe all data. Use it to fix Ghost Data issues.")
     if st.button("FACTORY RESET (Clean System)", type="primary"):
         del st.session_state.df
         st.success("System Reset Successfully.")
