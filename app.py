@@ -145,7 +145,7 @@ with st.sidebar:
         """, unsafe_allow_html=True)
     
     # Patient Search
-    st.markdown("### 🔍 Patient Search")
+    st.markdown("### Patient Search")
     search_q = st.text_input("Enter PIN", placeholder="e.g. PIN-2005")
     if search_q:
         res = df[(df['PIN'] == search_q) & (df['Actual_Discharge'].isna())]
@@ -210,7 +210,7 @@ if menu == "Overview":
         st.plotly_chart(fig, use_container_width=True)
 
     with ai_col:
-        st.markdown(f"""<div class="ai-container"><div class="ai-header">🤖 AI Operational Recommendations</div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="ai-container"><div class="ai-header">AI Operational Recommendations</div>""", unsafe_allow_html=True)
         ai_triggered = False
         for dept, info in DEPARTMENTS.items():
             d_pats = active_df[active_df['Department'] == dept]
@@ -494,7 +494,7 @@ elif menu == "Operational Analytics":
 # ---------------------------------------------------------
 elif menu == "Settings":
     st.title("System Settings")
-    st.warning("⚠️ **Factory Reset:** This will wipe all data. Use it to fix 'Ghost Data' issues.")
+    st.warning("**Factory Reset:** This will wipe all data. Use it to fix 'Ghost Data' issues.")
     if st.button("FACTORY RESET (Clean System)", type="primary"):
         del st.session_state.df
         st.success("System Reset Successfully.")
