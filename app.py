@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
 from datetime import datetime, timedelta
 import numpy as np
 import time
@@ -157,13 +158,13 @@ with st.sidebar:
     # --- GLOWING LOGO SECTION ---
     if os.path.exists("logo.png"):
         st.image("logo.png", use_container_width=True)
-    else:
-        st.markdown("""
-        <div class="logo-box">
-            <div class="logo-main">OccupyBed AI</div>
-            <div class="logo-slogan">intelligent hospital bed management</div>
-        </div>
-        """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="logo-box">
+        <div class="logo-main">OccupyBed AI</div>
+        <div class="logo-slogan">intelligent hospital bed management</div>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Patient Search
     st.markdown("### Patient Search")
