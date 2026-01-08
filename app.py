@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
 from datetime import datetime, timedelta
 import numpy as np
 import time
@@ -12,25 +11,37 @@ import os
 # ---------------------------------------------------------
 st.set_page_config(page_title="OccupyBed AI MVP", layout="wide", page_icon="🏥")
 
+# --- GLOBAL TIME FREEZE ---
+# Setting "Now" to Jan 8, 2026 as requested
+CURRENT_DATE = datetime(2026, 1, 8, 12, 0, 0)
+
 st.markdown("""
 <style>
     /* Global Settings */
     .stApp { background-color: #0E1117; color: #E6EDF3; font-family: 'Segoe UI', sans-serif; }
     [data-testid="stSidebar"] { background-color: #010409; border-right: 1px solid #30363D; }
     
-    /* Glowing Logo */
+    /* --- GLOWING LOGO --- */
     @keyframes glow {
         from { text-shadow: 0 0 5px #fff, 0 0 10px #58A6FF; }
         to { text-shadow: 0 0 10px #fff, 0 0 20px #58A6FF; }
     }
     .logo-box { text-align: center; margin-bottom: 30px; margin-top: 10px; }
     .logo-main { 
-        font-size: 28px; font-weight: 800; color: #FFFFFF; 
-        animation: glow 2s infinite alternate; margin: 0; letter-spacing: 1px;
+        font-size: 28px; 
+        font-weight: 800; 
+        color: #FFFFFF; 
+        animation: glow 2s infinite alternate; 
+        margin: 0; 
+        letter-spacing: 1px;
     }
     .logo-slogan { 
-        font-size: 10px; color: #8B949E; text-transform: uppercase; 
-        letter-spacing: 2px; margin-top: 5px; font-weight: 500;
+        font-size: 10px; 
+        color: #8B949E; 
+        text-transform: uppercase; 
+        letter-spacing: 2px; 
+        margin-top: 5px; 
+        font-weight: 500;
     }
 
     /* KPI Cards */
@@ -39,12 +50,13 @@ st.markdown("""
         padding: 20px; text-align: center; height: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .kpi-label { font-size: 11px; color: #8B949E; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
-    .kpi-val { font-size: 24px; font-weight: 700; color: #FFF; margin: 0; }
+    .kpi-val { font-size: 28px; font-weight: 700; color: #FFF; margin: 0; }
     .kpi-sub { font-size: 11px; color: #58A6FF; margin-top: 5px;}
     
     /* Section Headers */
     .section-header {
-        font-size: 18px; font-weight: 700; color: #E6EDF3; margin-top: 20px; margin-bottom: 15px;
+        font-size: 16px; font-weight: 700; color: #E6EDF3; 
+        margin-top: 25px; margin-bottom: 15px; 
         border-left: 4px solid #58A6FF; padding-left: 10px;
     }
 
@@ -58,7 +70,8 @@ st.markdown("""
 
     /* Department Cards */
     .dept-card {
-        background-color: #0D1117; border: 1px solid #30363D; border-radius: 6px; padding: 15px; margin-bottom: 12px;
+        background-color: #0D1117; border: 1px solid #30363D; border-radius: 6px;
+        padding: 15px; margin-bottom: 12px;
     }
     .dept-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
     .dept-title { font-size: 14px; font-weight: 700; color: #FFF; }
@@ -98,16 +111,25 @@ def init_system():
             "Admit_Date", "Exp_Discharge", "Actual_Discharge", "Source"
         ])
         
-        # --- Clean Initial Data (Reasonable Load) ---
+        # --- Generate Data Relative to CURRENT_DATE (Jan 8, 2026) ---
         data = []
         for dept, info in DEPARTMENTS.items():
-            count = int(info['cap'] * np.random.uniform(0.4, 0.6))
+            count = int(info['cap'] * np.random.uniform(0.4, 0.65))
             for i in range(count):
                 bed_n = f"{dept[:3].upper()}-{i+1:03d}"
-                # Generate dates in Jan 2026 to ensure validity
-                base_date = datetime(2026, 1, 1)
-                adm = base_date + timedelta(days=np.random.randint(0, 5), hours=np.random.randint(1, 10))
+                
+                # Admit date is between 1 and 10 days BEFORE Current Date
+                days_ago = np.random.randint(1, 10)
+                adm = CURRENT_DATE - timedelta(days=days_ago, hours=np.random.randint(1, 12))
+                
+                # Exp discharge is in future relative to admit
                 exp = adm + timedelta(days=np.random.randint(3, 8))
+                
+                # Determine if active or discharged based on simulation
+                # Some patients admitted 8 days ago might have been discharged 2 days ago
+                actual_dis = pd.NaT
+                if np.random.random() < 0.3 and days_ago > 4:
+                    actual_dis = adm + timedelta(days=np.random.randint(2, 4))
                 
                 data.append({
                     "PIN": f"PIN-{np.random.randint(2000, 9999)}",
@@ -116,7 +138,7 @@ def init_system():
                     "Bed": bed_n,
                     "Admit_Date": adm,
                     "Exp_Discharge": exp,
-                    "Actual_Discharge": pd.NaT,
+                    "Actual_Discharge": actual_dis,
                     "Source": "Emergency"
                 })
         st.session_state.df = pd.DataFrame(data)
@@ -144,16 +166,16 @@ with st.sidebar:
         """, unsafe_allow_html=True)
     
     # Patient Search
-    st.markdown("### 🔍 Patient Search")
+    st.markdown("### Patient Search")
     search_q = st.text_input("Enter PIN", placeholder="e.g. PIN-2005")
     if search_q:
         res = df[(df['PIN'] == search_q) & (df['Actual_Discharge'].isna())]
         if not res.empty:
             r = res.iloc[0]
-            st.success(f"Found in: {r['Department']}")
+            st.success(f"Found: {r['Department']}")
             st.info(f"Bed: {r['Bed']}")
         else:
-            st.warning("Not found or Discharged")
+            st.warning("Not Active / Not Found")
 
     st.markdown("---")
     menu = st.radio("NAVIGATION", ["Overview", "Live Admissions", "Operational Analytics", "Settings"], label_visibility="collapsed")
@@ -170,11 +192,8 @@ if menu == "Overview":
         fc_hours = st.selectbox("Forecast Window", [6, 12, 24, 48, 72], index=2, format_func=lambda x: f"{x} Hours")
 
     # Metrics
-    now = datetime(2026, 1, 8, 14, 0) # Mock Current Time for consistency or use datetime.now()
-    now = datetime.now() 
-    
     active_df = df[df['Actual_Discharge'].isna()]
-    future_limit = now + timedelta(hours=fc_hours)
+    future_limit = CURRENT_DATE + timedelta(hours=fc_hours)
     
     total_cap = sum(d['cap'] for d in DEPARTMENTS.values())
     occ_count = len(active_df)
@@ -292,7 +311,7 @@ elif menu == "Live Admissions":
     st.subheader("New Admission")
     c1, c2 = st.columns(2)
     with c1:
-        # Filter Logic: Only show unassigned PINs
+        # Filter: Only show PINs that are NOT currently admitted
         active_pins = df[df['Actual_Discharge'].isna()]['PIN'].tolist()
         all_pins = list(PATIENT_DB.keys())
         valid_pins = [p for p in all_pins if p not in active_pins]
@@ -301,7 +320,7 @@ elif menu == "Live Admissions":
         gender = "Unknown"
         if pin != "Select...":
             gender = PATIENT_DB.get(pin, "Unknown")
-            st.info(f"System Identified: **{gender}**")
+            st.info(f"Gender: **{gender}**")
         
         dept = st.selectbox("Assign Department", ["Select..."] + list(DEPARTMENTS.keys()))
         
@@ -315,11 +334,11 @@ elif menu == "Live Admissions":
 
     with c2:
         d1, t1 = st.columns(2)
-        adm_d = d1.date_input("Admit Date", datetime.now())
-        adm_t = t1.time_input("Admit Time", datetime.now().time())
+        adm_d = d1.date_input("Admit Date", CURRENT_DATE)
+        adm_t = t1.time_input("Admit Time", CURRENT_DATE.time())
         d2, t2 = st.columns(2)
-        exp_d = d2.date_input("Exp Discharge Date", datetime.now() + timedelta(days=3))
-        exp_t = t2.time_input("Exp Discharge Time", datetime.now().time())
+        exp_d = d2.date_input("Exp Discharge Date", CURRENT_DATE + timedelta(days=3))
+        exp_t = t2.time_input("Exp Discharge Time", CURRENT_DATE.time())
         src = st.selectbox("Source", ["Emergency", "Elective", "Transfer"])
 
     if st.button("Confirm Admission", type="primary"):
@@ -368,8 +387,8 @@ elif menu == "Live Admissions":
             
             with tab_dis:
                 c_d1, c_d2 = st.columns(2)
-                act_d = c_d1.date_input("Actual Discharge Date", datetime.now())
-                act_t = c_d2.time_input("Actual Discharge Time", datetime.now().time())
+                act_d = c_d1.date_input("Actual Discharge Date", CURRENT_DATE)
+                act_t = c_d2.time_input("Actual Discharge Time", CURRENT_DATE.time())
                 if st.button("Confirm Discharge", type="primary"):
                     st.session_state.df.at[p_idx, 'Actual_Discharge'] = datetime.combine(act_d, act_t)
                     st.success(f"Patient {target} Discharged.")
@@ -381,7 +400,7 @@ elif menu == "Live Admissions":
         st.info("No active patients.")
 
 # ---------------------------------------------------------
-# 6. Operational Analytics
+# 6. Operational Analytics (V25 - Exact Chart Match)
 # ---------------------------------------------------------
 elif menu == "Operational Analytics":
     st.title("Operational Analytics")
@@ -390,7 +409,7 @@ elif menu == "Operational Analytics":
     # --- 1. CALCULATE KPIs (Hospital Level) ---
     if not calc.empty:
         min_date = calc['Admit_Date'].min()
-        max_date = datetime.now()
+        max_date = CURRENT_DATE
         days_range = (max_date - min_date).days
         if days_range < 1: days_range = 1
     else:
@@ -399,31 +418,28 @@ elif menu == "Operational Analytics":
     total_dis = len(calc[calc['Actual_Discharge'].notnull()])
     total_cap = sum(d['cap'] for d in DEPARTMENTS.values())
     
-    # Hospital BOR (Bed Occupancy Rate)
+    # BOR
     active = calc[calc['Actual_Discharge'].isna()]
     h_bor = (len(active) / total_cap) * 100
     
-    # Hospital ALOS (Avg Length of Stay)
+    # ALOS
     discharged_only = calc[calc['Actual_Discharge'].notnull()]
+    h_alos = 0
     if not discharged_only.empty:
         h_alos = (discharged_only['Actual_Discharge'] - discharged_only['Admit_Date']).dt.total_seconds().mean() / 86400
-    else:
-        h_alos = 0
         
-    # Hospital BTR (Bed Turnover Rate)
+    # BTR & BTI
     h_btr = total_dis / total_cap
     
-    # Hospital BTI (Bed Turnover Interval)
-    calc['Discharge_Calc'] = calc['Actual_Discharge'].fillna(datetime.now())
+    calc['Discharge_Calc'] = calc['Actual_Discharge'].fillna(CURRENT_DATE)
     calc['Patient_Days'] = (calc['Discharge_Calc'] - calc['Admit_Date']).dt.total_seconds() / 86400
     total_pat_days = calc['Patient_Days'].sum()
     avail_bed_days = (total_cap * days_range) - total_pat_days
     h_bti = avail_bed_days / total_dis if total_dis > 0 else 0
 
-    # --- 2. DISPLAY KPIs (Hospital Level) ---
-    st.markdown('<div class="section-header">Hospital Level KPIs</div>', unsafe_allow_html=True)
+    # --- 2. DISPLAY KPIs ---
+    st.markdown('<div class="section-header">Operational KPIs</div>', unsafe_allow_html=True)
     k1, k2, k3, k4 = st.columns(4)
-    
     def kpi_box(lbl, val, unit):
         return f"""<div class="kpi-card"><div class="kpi-label">{lbl}</div><div class="kpi-val" style="font-size:24px;">{val}</div><div class="kpi-sub">{unit}</div></div>"""
         
@@ -434,52 +450,80 @@ elif menu == "Operational Analytics":
 
     st.markdown("---")
     
-    # --- 3. TREND CHART (Line Chart) ---
-    st.markdown('<div class="section-header">Admissions vs Discharges Trend</div>', unsafe_allow_html=True)
+    # --- 3. TREND CHART (Line Chart with Markers) - EXACT MATCH ---
+    st.markdown('<div class="section-header">Admissions vs Discharges (Operational Trend)</div>', unsafe_allow_html=True)
+    
+    # Aggregate data by Date
     daily_adm = calc.groupby(calc['Admit_Date'].dt.date).size().reset_index(name='Admissions')
     
     if not discharged_only.empty:
         daily_dis = discharged_only.groupby(discharged_only['Actual_Discharge'].dt.date).size().reset_index(name='Discharges')
-        trend = pd.merge(daily_adm, daily_dis, left_on='Admit_Date', right_on='Actual_Discharge', how='outer').fillna(0)
-        trend = trend.sort_values('Admit_Date')
+    else:
+        daily_dis = pd.DataFrame(columns=['Actual_Discharge', 'Discharges'])
+
+    # Merge and fill NaN with 0
+    if not daily_adm.empty:
+        trend = pd.merge(daily_adm, daily_dis, left_on='Admit_Date', right_on='Actual_Discharge', how='outer')
+        trend['Admit_Date'] = trend['Admit_Date'].fillna(trend['Actual_Discharge'])
+        trend = trend.drop(columns=['Actual_Discharge']).fillna(0).sort_values('Admit_Date')
         
-        # Line Chart
+        # Filter for the last 7-10 days leading up to CURRENT_DATE
+        mask = (trend['Admit_Date'] <= CURRENT_DATE.date()) & (trend['Admit_Date'] >= (CURRENT_DATE - timedelta(days=10)).date())
+        trend = trend.loc[mask]
+
+        # Plotly Line Chart to mimic the reference image
         fig_trend = go.Figure()
-        fig_trend.add_trace(go.Scatter(x=trend['Admit_Date'], y=trend['Admissions'], mode='lines+markers', name='Admissions', line=dict(color='#58A6FF', width=3)))
-        fig_trend.add_trace(go.Scatter(x=trend['Admit_Date'], y=trend['Discharges'], mode='lines+markers', name='Discharges', line=dict(color='#D29922', width=3)))
+        
+        # Line 1: Admissions (Blue)
+        fig_trend.add_trace(go.Scatter(
+            x=trend['Admit_Date'], y=trend['Admissions'],
+            mode='lines+markers',
+            name='Admissions',
+            line=dict(color='#1f77b4', width=2), # Standard Blue
+            marker=dict(size=8)
+        ))
+        
+        # Line 2: Discharges (Orange)
+        fig_trend.add_trace(go.Scatter(
+            x=trend['Admit_Date'], y=trend['Discharges'],
+            mode='lines+markers',
+            name='Discharges',
+            line=dict(color='#ff7f0e', width=2), # Standard Orange
+            marker=dict(size=8)
+        ))
         
         fig_trend.update_layout(
-            paper_bgcolor="#0E1117", plot_bgcolor="#0E1117", font={'color': "white"},
-            xaxis_title="Date", yaxis_title="Count",
-            margin=dict(l=0, r=0, t=10, b=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            paper_bgcolor="#0E1117", 
+            plot_bgcolor="#0E1117", 
+            font={'color': "white"},
+            xaxis_title="Date", 
+            yaxis_title="Number of Patients",
+            xaxis=dict(showgrid=True, gridcolor='#30363D'),
+            yaxis=dict(showgrid=True, gridcolor='#30363D'),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            margin=dict(l=0, r=0, t=20, b=0)
         )
-        fig_trend.update_xaxes(showgrid=True, gridcolor='#30363D')
-        fig_trend.update_yaxes(showgrid=True, gridcolor='#30363D')
         st.plotly_chart(fig_trend, use_container_width=True)
     else:
-        st.info("Insufficient discharge data to generate trends.")
+        st.info("No data available for trend analysis.")
 
     st.markdown("---")
 
-    # --- 4. Detailed Department Table (Matches Hospital KPIs) ---
-    st.markdown('<div class="section-header">Department Level KPIs</div>', unsafe_allow_html=True)
+    # --- 4. Detailed Department Table ---
+    st.markdown('<div class="section-header">Hospital Details Performance</div>', unsafe_allow_html=True)
     
     dept_rows = []
     for dept, info in DEPARTMENTS.items():
         d_df = calc[calc['Department'] == dept]
         
-        # BOR
         d_active = len(d_df[d_df['Actual_Discharge'].isna()])
         d_bor = (d_active / info['cap']) * 100
         
-        # ALOS
         d_dis = d_df[d_df['Actual_Discharge'].notnull()]
         d_alos = (d_dis['Actual_Discharge'] - d_dis['Admit_Date']).dt.total_seconds().mean() / 86400 if not d_dis.empty else 0
         
-        # BTR
         d_btr = len(d_dis) / info['cap']
         
-        # BTI
         d_pat_days = ((d_df['Discharge_Calc'] - d_df['Admit_Date']).dt.total_seconds() / 86400).sum()
         d_avail_days = (info['cap'] * days_range) - d_pat_days
         d_bti = d_avail_days / len(d_dis) if len(d_dis) > 0 else 0
@@ -492,7 +536,20 @@ elif menu == "Operational Analytics":
             "BTI (Days)": round(d_bti, 1)
         })
     
-    st.dataframe(pd.DataFrame(dept_rows), use_container_width=True)
+    # Progress Bar for BOR
+    st.dataframe(
+        pd.DataFrame(dept_rows),
+        column_config={
+            "BOR (%)": st.column_config.ProgressColumn(
+                "BOR (%)",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100,
+            ),
+        },
+        use_container_width=True,
+        hide_index=True
+    )
 
 # ---------------------------------------------------------
 # 7. Settings
