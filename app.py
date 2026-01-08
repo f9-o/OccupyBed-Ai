@@ -8,17 +8,17 @@ import time
 import os
 
 # ---------------------------------------------------------
-# 1. System Config & Design
+# 1. System Config & Design (OccupyBed AI MVP)
 # ---------------------------------------------------------
 st.set_page_config(page_title="OccupyBed AI MVP", layout="wide", page_icon="🏥")
 
 st.markdown("""
 <style>
-    /* Global Settings - Force Dark Mode Look */
+    /* Global Settings */
     .stApp { background-color: #0E1117; color: #E6EDF3; font-family: 'Segoe UI', sans-serif; }
     [data-testid="stSidebar"] { background-color: #010409; border-right: 1px solid #30363D; }
     
-    /* --- GLOWING LOGO --- */
+    /* Glowing Logo */
     @keyframes glow {
         from { text-shadow: 0 0 5px #fff, 0 0 10px #58A6FF; }
         to { text-shadow: 0 0 10px #fff, 0 0 20px #58A6FF; }
@@ -39,9 +39,15 @@ st.markdown("""
         padding: 20px; text-align: center; height: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .kpi-label { font-size: 11px; color: #8B949E; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
-    .kpi-val { font-size: 28px; font-weight: 700; color: #FFF; margin: 0; }
+    .kpi-val { font-size: 24px; font-weight: 700; color: #FFF; margin: 0; }
     .kpi-sub { font-size: 11px; color: #58A6FF; margin-top: 5px;}
     
+    /* Section Headers */
+    .section-header {
+        font-size: 18px; font-weight: 700; color: #E6EDF3; margin-top: 20px; margin-bottom: 15px;
+        border-left: 4px solid #58A6FF; padding-left: 10px;
+    }
+
     /* AI Board */
     .ai-container {
         background-color: #161B22; border: 1px solid #30363D; border-left: 5px solid #A371F7;
@@ -52,8 +58,7 @@ st.markdown("""
 
     /* Department Cards */
     .dept-card {
-        background-color: #0D1117; border: 1px solid #30363D; border-radius: 6px;
-        padding: 15px; margin-bottom: 12px;
+        background-color: #0D1117; border: 1px solid #30363D; border-radius: 6px; padding: 15px; margin-bottom: 12px;
     }
     .dept-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
     .dept-title { font-size: 14px; font-weight: 700; color: #FFF; }
@@ -99,12 +104,13 @@ def init_system():
             count = int(info['cap'] * np.random.uniform(0.4, 0.6))
             for i in range(count):
                 bed_n = f"{dept[:3].upper()}-{i+1:03d}"
-                # Past admissions
-                adm = datetime.now() - timedelta(days=np.random.randint(1, 5), hours=np.random.randint(1, 10))
+                # Generate dates in Jan 2026 to ensure validity
+                base_date = datetime(2026, 1, 1)
+                adm = base_date + timedelta(days=np.random.randint(0, 5), hours=np.random.randint(1, 10))
                 exp = adm + timedelta(days=np.random.randint(3, 8))
                 
                 data.append({
-                    "PIN": f"PIN-{np.random.randint(1000, 9999)}",
+                    "PIN": f"PIN-{np.random.randint(2000, 9999)}",
                     "Gender": "Female" if "Female" in dept else ("Male" if "Male" in dept else np.random.choice(["Male", "Female"])),
                     "Department": dept,
                     "Bed": bed_n,
@@ -126,7 +132,7 @@ for col in ['Admit_Date', 'Exp_Discharge', 'Actual_Discharge']:
 # 3. Sidebar (Search & Nav)
 # ---------------------------------------------------------
 with st.sidebar:
-    # --- LOGO SECTION ---
+    # --- GLOWING LOGO SECTION ---
     if os.path.exists("logo.png"):
         st.image("logo.png", use_container_width=True)
     else:
@@ -141,14 +147,13 @@ with st.sidebar:
     st.markdown("### 🔍 Patient Search")
     search_q = st.text_input("Enter PIN", placeholder="e.g. PIN-2005")
     if search_q:
-        # Search in Active Patients
         res = df[(df['PIN'] == search_q) & (df['Actual_Discharge'].isna())]
         if not res.empty:
             r = res.iloc[0]
             st.success(f"Found in: {r['Department']}")
             st.info(f"Bed: {r['Bed']}")
         else:
-            st.warning("Not active in system.")
+            st.warning("Not found or Discharged")
 
     st.markdown("---")
     menu = st.radio("NAVIGATION", ["Overview", "Live Admissions", "Operational Analytics", "Settings"], label_visibility="collapsed")
@@ -165,15 +170,15 @@ if menu == "Overview":
         fc_hours = st.selectbox("Forecast Window", [6, 12, 24, 48, 72], index=2, format_func=lambda x: f"{x} Hours")
 
     # Metrics
-    now = datetime.now()
+    now = datetime(2026, 1, 8, 14, 0) # Mock Current Time for consistency or use datetime.now()
+    now = datetime.now() 
+    
     active_df = df[df['Actual_Discharge'].isna()]
     future_limit = now + timedelta(hours=fc_hours)
     
     total_cap = sum(d['cap'] for d in DEPARTMENTS.values())
     occ_count = len(active_df)
     avail_count = total_cap - occ_count
-    
-    # Corrected Logic: Count based on Exp_Discharge date
     ready_count = len(active_df[active_df['Exp_Discharge'] <= future_limit])
 
     # 1. Top Row: KPI Cards
@@ -188,6 +193,7 @@ if menu == "Overview":
     # 2. Middle Row: Gauge + AI
     g_col, ai_col = st.columns([1, 2])
     with g_col:
+        # Gauge Chart
         occ_rate = (occ_count / total_cap) * 100 if total_cap > 0 else 0
         fig = go.Figure(go.Indicator(
             mode = "gauge+number", value = occ_rate,
@@ -265,7 +271,7 @@ if menu == "Overview":
 elif menu == "Live Admissions":
     st.title("Patient Admission & Discharge Center")
     
-    # 1. Data Management (Moved Here)
+    # 1. Data Management
     with st.expander("Data Operations (Import / Export)", expanded=False):
         c_dl, c_ul = st.columns(2)
         with c_dl:
@@ -286,27 +292,19 @@ elif menu == "Live Admissions":
     st.subheader("New Admission")
     c1, c2 = st.columns(2)
     with c1:
-        # FILTER: Only show PINs that are NOT currently admitted
+        # Filter Logic: Only show unassigned PINs
         active_pins = df[df['Actual_Discharge'].isna()]['PIN'].tolist()
         all_pins = list(PATIENT_DB.keys())
-        available_pins = [p for p in all_pins if p not in active_pins]
+        valid_pins = [p for p in all_pins if p not in active_pins]
         
-        if not available_pins:
-            st.info("All patients in DB are currently admitted.")
-            pin = "Select..."
-        else:
-            pin = st.selectbox("Select Patient PIN", ["Select..."] + available_pins)
-            
-        # Gender Logic
+        pin = st.selectbox("Select Patient PIN", ["Select..."] + valid_pins)
+        gender = "Unknown"
         if pin != "Select...":
             gender = PATIENT_DB.get(pin, "Unknown")
             st.info(f"System Identified: **{gender}**")
-        else:
-            gender = "Unknown"
         
         dept = st.selectbox("Assign Department", ["Select..."] + list(DEPARTMENTS.keys()))
         
-        # Bed Logic
         bed_opts = ["Select Dept"]
         if dept != "Select...":
             occ_beds = df[(df['Department'] == dept) & (df['Actual_Discharge'].isna())]['Bed'].tolist()
@@ -325,7 +323,6 @@ elif menu == "Live Admissions":
         src = st.selectbox("Source", ["Emergency", "Elective", "Transfer"])
 
     if st.button("Confirm Admission", type="primary"):
-        # Double Check Validation
         if pin == "Select..." or dept == "Select..." or bed in ["Select Dept", "NO BEDS AVAILABLE"]:
             st.warning("Please complete all fields.")
         elif DEPARTMENTS[dept]['gen'] != "Mixed" and DEPARTMENTS[dept]['gen'] != gender:
@@ -390,7 +387,7 @@ elif menu == "Operational Analytics":
     st.title("Operational Analytics")
     calc = df.copy()
     
-    # --- CALCULATIONS ---
+    # --- 1. CALCULATE KPIs (Hospital Level) ---
     if not calc.empty:
         min_date = calc['Admit_Date'].min()
         max_date = datetime.now()
@@ -399,57 +396,61 @@ elif menu == "Operational Analytics":
     else:
         days_range = 1
         
-    total_adm = len(calc)
     total_dis = len(calc[calc['Actual_Discharge'].notnull()])
     total_cap = sum(d['cap'] for d in DEPARTMENTS.values())
     
-    # Hospital Level KPIs
-    bor = (len(calc[calc['Actual_Discharge'].isna()]) / total_cap) * 100
+    # Hospital BOR (Bed Occupancy Rate)
+    active = calc[calc['Actual_Discharge'].isna()]
+    h_bor = (len(active) / total_cap) * 100
     
+    # Hospital ALOS (Avg Length of Stay)
     discharged_only = calc[calc['Actual_Discharge'].notnull()]
     if not discharged_only.empty:
-        alos = (discharged_only['Actual_Discharge'] - discharged_only['Admit_Date']).dt.total_seconds().mean() / 86400
+        h_alos = (discharged_only['Actual_Discharge'] - discharged_only['Admit_Date']).dt.total_seconds().mean() / 86400
     else:
-        alos = 0
+        h_alos = 0
         
-    btr = total_dis / total_cap
+    # Hospital BTR (Bed Turnover Rate)
+    h_btr = total_dis / total_cap
     
-    # BTI (Approximation)
+    # Hospital BTI (Bed Turnover Interval)
     calc['Discharge_Calc'] = calc['Actual_Discharge'].fillna(datetime.now())
     calc['Patient_Days'] = (calc['Discharge_Calc'] - calc['Admit_Date']).dt.total_seconds() / 86400
     total_pat_days = calc['Patient_Days'].sum()
     avail_bed_days = (total_cap * days_range) - total_pat_days
-    bti = avail_bed_days / total_dis if total_dis > 0 else 0
+    h_bti = avail_bed_days / total_dis if total_dis > 0 else 0
 
-    # --- 1. Hospital Level KPIs ---
-    st.subheader("Hospital Level KPIs")
+    # --- 2. DISPLAY KPIs (Hospital Level) ---
+    st.markdown('<div class="section-header">Hospital Level KPIs</div>', unsafe_allow_html=True)
     k1, k2, k3, k4 = st.columns(4)
+    
     def kpi_box(lbl, val, unit):
         return f"""<div class="kpi-card"><div class="kpi-label">{lbl}</div><div class="kpi-val" style="font-size:24px;">{val}</div><div class="kpi-sub">{unit}</div></div>"""
         
-    k1.markdown(kpi_box("BOR", f"{bor:.1f}", "%"), unsafe_allow_html=True)
-    k2.markdown(kpi_box("ALOS", f"{alos:.1f}", "Days"), unsafe_allow_html=True)
-    k3.markdown(kpi_box("BTR", f"{btr:.2f}", "Times / Month"), unsafe_allow_html=True)
-    k4.markdown(kpi_box("BTI", f"{bti:.1f}", "Days"), unsafe_allow_html=True)
+    k1.markdown(kpi_box("BOR", f"{h_bor:.1f}", "%"), unsafe_allow_html=True)
+    k2.markdown(kpi_box("ALOS", f"{h_alos:.1f}", "Days"), unsafe_allow_html=True)
+    k3.markdown(kpi_box("BTR", f"{h_btr:.2f}", "Times / Month"), unsafe_allow_html=True)
+    k4.markdown(kpi_box("BTI", f"{h_bti:.1f}", "Days"), unsafe_allow_html=True)
 
     st.markdown("---")
     
-    # --- 2. Trends Chart (Line Chart) ---
-    st.subheader("Admissions vs Discharges (Trend)")
+    # --- 3. TREND CHART (Line Chart) ---
+    st.markdown('<div class="section-header">Admissions vs Discharges Trend</div>', unsafe_allow_html=True)
     daily_adm = calc.groupby(calc['Admit_Date'].dt.date).size().reset_index(name='Admissions')
+    
     if not discharged_only.empty:
         daily_dis = discharged_only.groupby(discharged_only['Actual_Discharge'].dt.date).size().reset_index(name='Discharges')
         trend = pd.merge(daily_adm, daily_dis, left_on='Admit_Date', right_on='Actual_Discharge', how='outer').fillna(0)
         trend = trend.sort_values('Admit_Date')
         
-        # Line Chart with Markers
+        # Line Chart
         fig_trend = go.Figure()
         fig_trend.add_trace(go.Scatter(x=trend['Admit_Date'], y=trend['Admissions'], mode='lines+markers', name='Admissions', line=dict(color='#58A6FF', width=3)))
         fig_trend.add_trace(go.Scatter(x=trend['Admit_Date'], y=trend['Discharges'], mode='lines+markers', name='Discharges', line=dict(color='#D29922', width=3)))
         
         fig_trend.update_layout(
             paper_bgcolor="#0E1117", plot_bgcolor="#0E1117", font={'color': "white"},
-            xaxis_title="Date", yaxis_title="Number of Patients",
+            xaxis_title="Date", yaxis_title="Count",
             margin=dict(l=0, r=0, t=10, b=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         fig_trend.update_xaxes(showgrid=True, gridcolor='#30363D')
@@ -460,8 +461,8 @@ elif menu == "Operational Analytics":
 
     st.markdown("---")
 
-    # --- 3. Detailed Table ---
-    st.subheader("Hospital Details Performance")
+    # --- 4. Detailed Department Table (Matches Hospital KPIs) ---
+    st.markdown('<div class="section-header">Department Level KPIs</div>', unsafe_allow_html=True)
     
     dept_rows = []
     for dept, info in DEPARTMENTS.items():
